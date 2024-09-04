@@ -10,6 +10,7 @@
 _start:
 	// Here your execution starts
 	mov r0, #1
+	//mov r7, #0xFF200000
 	b check_input
 	b _exit
 
@@ -37,19 +38,25 @@ check_input:
 	add r5, r1, r2
 	// nå inneholder r4 adressen til fremste tegn og r5 adressen til bakerste tegn
 check_palindrome:
+	b find_beginning_char
+	skip_beginning_space:
+	add r4, r4, #1
 	find_beginning_char:
 	ldrb r3, [r4]
 	//add r4, r4, #1
 	cmp r3, #' '
-	beq find_beginning_char
+	beq skip_beginning_space
 	// Nå ligger første ikke-mellomrom tegn i r3
 	
+	b find_end_char
+	skip_end_space:
+	sub r5, r5, #1
 	find_end_char:
 	ldrb r6, [r5]
 	// r6 inneholder nå bakerste tegn
 	//sub r5, r5, #1
 	cmp r6, #' '
-	beq find_end_char
+	beq skip_end_space
 	// nå ligger bakerste ikke-mellomrom tegn i r6
 	
 	// Sjekker om adressen i r4 har gått forbi adressen i r5
@@ -62,7 +69,21 @@ check_palindrome:
 	
 	cmp r3, r6
 	beq check_palindrome
-	bne is_no_palindrome
+	cmp r3, #0x3F
+	beq check_palindrome
+	cmp r6, #0x3F
+	beq check_palindrome
+	// Sammenligner med store bokstaver
+	// Sammenligner først med r6 + 20 i tilfelle r6 er stor
+	add r6, r6, #0x20
+	cmp r3, r6
+	beq check_palindrome
+	// Sammenligner deretter med (gammel) r6 - 20 i tilfelle r6 er liten
+	sub r6, r6, #0x40
+	cmp r3, r6
+	beq check_palindrome
+	
+	b is_no_palindrome
 	
 	
 is_palindrome:
@@ -105,6 +126,7 @@ write_to_jtag_uart:
 	
 	.global PUT_JTAG
 	PUT_JTAG:
+	//LDR R1, =JTAG_UART_BASE // JTAG UART base address
 	ldr R1, =0xFF201000
 	ldr R2, [R1, #4] // read the JTAG UART control register
 	ldr R3, =0xFFFF0000
@@ -116,6 +138,7 @@ write_to_jtag_uart:
 	
 	.global GET_JTAG
 	GET_JTAG:
+	//LDR R1, =JTAG_UART_BASE // JTAG UART base address
 	ldr R1, =0xFF201000
 	ldr R0, [R1] // read the JTAG UART data register
 	ands R2, R0, #0x8000 // check if there is new data
@@ -136,7 +159,7 @@ _exit:
 	// This is the input you are supposed to check for a palindrom
 	// You can modify the string during development, however you
 	// are not allowed to change the name 'input'!
-	input: .asciz "abba"
+	input: .asciz "hei paap ieh"
 	IS_PALINDROME_STRING: .asciz "Palindrome detected"
 	NOT_PALINDROME_STRING: .asciz "Not a palindrome"
 .end
