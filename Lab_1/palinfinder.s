@@ -9,7 +9,7 @@
 
 _start:
 	// Here your execution starts
-	mov r0, #1
+	//mov r0, #1
 	
 check_input:
 	// You could use this symbol to check for your input length
@@ -17,65 +17,65 @@ check_input:
 	// long and ends with a null byte
 	
 	// laster adressen til input inn i register r1
-	ldr r1, =input // loading the address of the input string into r1
+	ldr r0, =input // loading the address of the input string into r0
 	// finding the length of the input by iterating byte for byte until we reach null character
-	mov r2, #0 // setting r2 to 0, and use it as length
+	mov r1, #0 // setting r1 to 0, and using it as length
 	loop:
-	add r3, r1, r2 // load the address for the current character we want to check to r3
-	ldrb r4, [r3] // load the character at the address in r3 into r4
-	add r2, r2, #1 // increment the length counter r2
-	cmp r4, #0 // compare the loaded character with null character
+	add r2, r0, r1 // load the address for the current character we want to check to r2
+	ldrb r2, [r2] // load the character at the address in r2 into r2
+	add r1, r1, #1 // increment the length counter r1
+	cmp r2, #0 // compare the loaded character with null character
 	bne loop // if not equal, we keep iterating
-	sub r2, r2, #2 // if equal, we subtract 2 in order to get a value
+	sub r1, r1, #2 // if equal, we subtract 2 in order to get a value
 	               // we can use to find address of last sign
 
-	mov r4, r1 // put the address of the first character into r4
-	add r5, r1, r2 // put the address of the last character into r5
+	// the address of the first character is now in r0
+	add r1, r0, r1 // put the address of the last character into r1
 check_palindrome:
 	// here we first iterate from the beginning until we find a non-space character
 	b find_beginning_char // first we skip the increment, since there might be
 						// a non-space character in the beginning
 	skip_beginning_space:
-	add r4, r4, #1 // incrementing the beginning address if we find a space
+	add r0, r0, #1 // incrementing the beginning address if we find a space
 	find_beginning_char:
-	ldrb r3, [r4] // loading the character at address r4 into r3
-	cmp r3, #' ' // comparing this character with the space character
+	ldrb r2, [r0] // loading the character at address r0 into r2
+	cmp r2, #' ' // comparing this character with the space character
 	beq skip_beginning_space // if its a space, we branch to skip to next character
-	// now, the first non-space character is stored in r3
+	// now, the first non-space character is stored in r2
 	
 	// here we iterate from the end until we find a non-space character
 	b find_end_char // first we skip the increment, since there might be
 					// a non-space character in the end
 	skip_end_space:
-	sub r5, r5, #1 // decrementing the end address if we find a space
+	sub r1, r1, #1 // decrementing the end address if we find a space
 	find_end_char:
-	ldrb r6, [r5] // loading the character at address r5 into r6
-	cmp r6, #' ' // comparing this character with the space character
+	ldrb r3, [r1] // loading the character at address r1 into r3
+	cmp r3, #' ' // comparing this character with the space character
 	beq skip_end_space // if its a space, we branch to skip to next character
-	// now, the last non-space character is stored in r6
+	// now, the last non-space character is stored in r3
 	
-	cmp r4, r5 // we check if the address in r4 has gone past the address in r5
+	cmp r0, r1 // we check if the address in r0 has gone past the address in r1
 	bge is_palindrome // if true, it has succeded and the input is a palindrome
 
-	add r4, r4, #1 // incrementing the address to point to next beginning character
-	sub r5, r5, #1 // decrementing the address to point to next end character
+	add r0, r0, #1 // incrementing the address to point to next beginning character
+	sub r1, r1, #1 // decrementing the address to point to next end character
 	
-	cmp r3, r6 // comparing the current beginning- and end characters
+	cmp r2, r3 // comparing the current beginning- and end characters
 	beq check_palindrome // if they are equal, we continue looping and checking next characters
-	cmp r3, #0x3F // comparing r3 to a questionmark
+	cmp r2, #0x3F // comparing r2 to a questionmark
 	beq check_palindrome // if equal, we continue looping since ? is a joker character
-	cmp r6, #0x3F // comparing r6 to a questionmark
+	cmp r3, #0x3F // comparing r3 to a questionmark
 	beq check_palindrome // if equal, we continue looping
 	
 	// want the check to be case insensitive, so need to compare with both characters
-	add r6, r6, #0x20 // first add 20 to end character
-	// if r6 was originally big, by adding 20, r6 now contains the small version
-	cmp r3, r6 // comparing r3 to this new character value
+	add r3, r3, #0x20 // first add 20 to end character
+	// if r3 was originally big, by adding 20, r3 now contains the small version
+	cmp r2, r3 // comparing r2 to this new character value
 	beq check_palindrome // if equal, we continue checking the next characters
-	sub r6, r6, #0x40 // then subtract 40 from end character
-	// if r6 was originally small, by now subtracting 40 after adding 20,
-	// r6 now contains the big version
-	cmp r3, r6 // comparing r3 to this new character value
+	sub r3, r3, #0x40 // then subtract 40 from end character
+	// if r3 was originally small, by now subtracting 40 after adding 20,
+	// r3 now contains the big version
+	cmp r2, r3 // comparing r2 to this new character value
 	beq check_palindrome // if equal, we continue checking the next characters
 	
 	b is_no_palindrome // if none of the checks were successful, the characters are
@@ -90,7 +90,7 @@ is_palindrome:
 	mov r1, #0x1F        // writing 0x1F into r1, which corresponds to the rightmost
 						// bits turning 1
 	str r1, [r0]         // storing the modified value back to the address
-	ldr r4, =IS_PALINDROME_STRING // loading the address of the string to be printed to r4
+	ldr r2, =IS_PALINDROME_STRING // loading the address of the string to be printed to r2
 	b write_to_jtag_uart // branch to section to write to UART
 	
 	
@@ -102,17 +102,17 @@ is_no_palindrome:
 	mov r1, #0x3E0       // writing 0x3E0 into r1, which corresponds to the leftmost
 						// bits turning 1
 	str r1, [r0]         // storing the modified value back to the address
-	ldr r4, =NOT_PALINDROME_STRING // loading the address of the string to be printed to r4
+	ldr r2, =NOT_PALINDROME_STRING // loading the address of the string to be printed to r2
 	b write_to_jtag_uart // branch to section to write to UART
 	
 write_to_jtag_uart:
 	ldr r1, =0xFF201000 // loading the base address of the UART into r1
 	uart_loop:
-	ldrb R0, [R4] // loading one byte of the message to r0
-	cmp R0, #0 // comparing the character with null-character
+	ldrb r0, [r2] // loading one byte of the message to r0
+	cmp r0, #0 // comparing the character with null-character
 	beq _exit // if equal, we have reached the end, and exit the program
 	str r0, [r1] // store the character to the UART address
-	add R4, R4, #1 // increment address to point to next character
+	add r2, r2, #1 // increment address to point to next character
 	b uart_loop // keep iterating to check next character
 	
 _exit:
@@ -124,7 +124,7 @@ _exit:
 	// This is the input you are supposed to check for a palindrom
 	// You can modify the string during development, however you
 	// are not allowed to change the name 'input'!
-	input: .asciz "hei pabp ieh"
+	input: .asciz "Grav ned den varg"
 	IS_PALINDROME_STRING: .asciz "Palindrome detected"
 	NOT_PALINDROME_STRING: .asciz "Not a palindrome"
 .end
