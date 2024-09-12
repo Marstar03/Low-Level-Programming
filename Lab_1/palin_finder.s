@@ -15,7 +15,6 @@ check_input:
 	// you can assume that your input string is at least 2 characters 
 	// long and ends with a null byte
 	
-	// laster adressen til input inn i register r1
 	ldr r0, =input // loading the address of the input string into r0
 	// finding the length of the input by iterating byte for byte until we reach null character
 	mov r1, #0 // setting r1 to 0, and using it as length
