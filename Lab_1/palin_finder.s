@@ -9,7 +9,6 @@
 
 _start:
 	// Here your execution starts
-	//mov r0, #1
 	
 check_input:
 	// You could use this symbol to check for your input length
@@ -35,9 +34,9 @@ check_palindrome:
 	// here we first iterate from the beginning until we find a non-space character
 	b find_beginning_char // first we skip the increment, since there might be
 						// a non-space character in the beginning
-	skip_beginning_space:
+skip_beginning_space:
 	add r0, r0, #1 // incrementing the beginning address if we find a space
-	find_beginning_char:
+find_beginning_char:
 	ldrb r2, [r0] // loading the character at address r0 into r2
 	cmp r2, #' ' // comparing this character with the space character
 	beq skip_beginning_space // if its a space, we branch to skip to next character
@@ -46,9 +45,9 @@ check_palindrome:
 	// here we iterate from the end until we find a non-space character
 	b find_end_char // first we skip the increment, since there might be
 					// a non-space character in the end
-	skip_end_space:
+skip_end_space:
 	sub r1, r1, #1 // decrementing the end address if we find a space
-	find_end_char:
+find_end_char:
 	ldrb r3, [r1] // loading the character at address r1 into r3
 	cmp r3, #' ' // comparing this character with the space character
 	beq skip_end_space // if its a space, we branch to skip to next character
@@ -107,7 +106,7 @@ is_no_palindrome:
 	
 write_to_jtag_uart:
 	ldr r1, =0xFF201000 // loading the base address of the UART into r1
-	uart_loop:
+uart_loop:
 	ldrb r0, [r2] // loading one byte of the message to r0
 	cmp r0, #0 // comparing the character with null-character
 	beq _exit // if equal, we have reached the end, and exit the program
@@ -125,6 +124,8 @@ _exit:
 	// You can modify the string during development, however you
 	// are not allowed to change the name 'input'!
 	input: .asciz "Grav ned den varg"
+
+	// Strings to be printed to UART if input is/is not a palindrome
 	IS_PALINDROME_STRING: .asciz "Palindrome detected"
 	NOT_PALINDROME_STRING: .asciz "Not a palindrome"
 .end
