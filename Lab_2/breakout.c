@@ -48,6 +48,7 @@ GameState currentState = Stopped;
  */
 
 // TODO: Add a C declaration for the ClearScreen assembly procedure
+void ClearScreen();
 void SetPixel(unsigned int x_coord, unsigned int y_coord, unsigned int color);
 void DrawBlock(unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color);
 void DrawBar(unsigned int y);
@@ -79,6 +80,32 @@ asm("SetPixel: \n\t"
 // TODO: Implement the DrawBlock function in assembly. You need to accept 5 parameters, as outlined in the c declaration above (unsigned int x, unsigned int y, unsigned int width, unsigned int height, unsigned int color)
 asm("DrawBlock: \n\t"
     // TODO: Here goes your implementation
+    "PUSH {LR} \n\t"          // Save the return address
+    "PUSH {R4-R7} \n\t"       // Save registers that will be used
+
+    "MOV R4, R0 \n\t"         // R4 = x
+    "MOV R5, R1 \n\t"         // R5 = y
+    "MOV R6, R2 \n\t"         // R6 = width
+    "MOV R7, R3 \n\t"         // R7 = height
+    "MOV R2, R4 \n\t"        // R2 = color
+
+    "mov r8, #0\n\t"
+    "mov r9, #0\n\t"
+    "loop:\n\t"
+    "MOV R0, R4\n\t"      // Prep param passing for x
+    "MOV R1, R5\n\t"      // Prep param passing for y
+    "BL SetPixel\n\t"     // Call SetPixel function
+    "add r4, r4, #1\n\t"  // Increment x
+    "add r8, r8, #1\n\t"  // Increment loop counter
+    "cmp r8, r6\n\t"     // Compare loop counter with 10
+    "blt loop\n\t"        // If less than 10, repeat loop
+    "sub r4, r4, r6\n\t" // Reset x to initial value
+    "mov r8, #0\n\t"      // Reset loop counter
+    "add r5, r5, #1\n\t"  // Increment y
+    "add r9, r9, #1\n\t"  // Increment outer loop counter
+    "cmp r9, r7\n\t"     // Compare outer loop counter with 10
+    "blt loop\n\t"        // If less than 10, repeat outer loop
+    
     "BX LR");
 
 // TODO: Impelement the DrawBar function in assembly. You need to accept the parameter as outlined in the c declaration above (unsigned int y)
@@ -88,6 +115,11 @@ asm("DrawBar: \n\t"
 asm("ReadUart:\n\t"
     "LDR R1, =0xFF201000 \n\t"
     "LDR R0, [R1]\n\t"
+    "BX LR");
+
+asm("WriteUart:\n\t"
+    "LDR R1, =0xFF201000 \n\t"
+    "STR R0, [R1]\n\t"
     "BX LR");
 
 // TODO: Add the WriteUart assembly procedure here that respects the WriteUart C declaration on line 46
@@ -126,7 +158,10 @@ void update_bar_state()
 
 void write(char *str)
 {
-    // TODO: Use WriteUart to write the string to JTAG UART
+    while (*str) {
+        WriteUart(*str);
+        str++;
+    }
 }
 
 void play()
