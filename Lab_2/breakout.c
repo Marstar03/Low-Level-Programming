@@ -21,11 +21,30 @@ char font8x8[128][8];        // DON'T TOUCH THIS - this is a forward declaration
  * TODO: Define your variables below this comment
  */
 
+
+typedef struct _ball
+{
+    // ballen er en 7x7 piksel firkant
+    // dette er koordinatene til den midterste pikselen til ballen
+    // bruker disse til å finne posisjonene til venstre, høyre, øvre og nedre piksel når vi vil sjekke om ballen har truffet noe
+    unsigned int middle_pos_x;
+    unsigned int middle_pos_y;
+} Ball;
+
+typedef struct _bar
+{
+    // baren er en 7x45 piksel firkant
+    // dette er koordinatene til den midterste pikselen til baren
+    unsigned int middle_pos_x;
+    unsigned int middle_pos_y;
+} Bar;
+
 /***
  * You might use and modify the struct/enum definitions below this comment
  */
 typedef struct _block
 {
+    // en block er en 15x15 piksel firkant
     unsigned char destroyed;
     unsigned char deleted;
     unsigned int pos_x;
@@ -42,6 +61,8 @@ typedef enum _gameState
     Exit = 4,
 } GameState;
 GameState currentState = Stopped;
+Ball ball = {0, 0};
+Bar bar = {0, 0};
 
 /***
  * Here follow the C declarations for our assembly functions
@@ -112,11 +133,11 @@ asm("DrawBlock: \n\t"
     "add R8, R8, #1\n\t"  // inkrementerer loop counter som holder styr på hvor i raden vi er
     "cmp R8, R6\n\t"     // sjekker om counteren er blitt lik 10, altså bredden på blokken
     "blt loop\n\t"        // hvis mindre enn 10, gjentar vi prosessen med oppdatert x-koordinat
-    "sub r4, r4, r6\n\t" // hvis lik 10, resetter vi x-koordinaten
-    "mov r8, #0\n\t"      // resetter loop counteren for x-koordinaten
-    "add r5, r5, #1\n\t"  // inkrementerer y, altså hopper til neste rad
-    "add r9, r9, #1\n\t"  // Inkrementerer y sin counter
-    "cmp r9, r7\n\t"     // sammenligner y sin counter med 10
+    "sub R4, R4, R6\n\t" // hvis lik 10, resetter vi x-koordinaten
+    "mov R8, #0\n\t"      // resetter loop counteren for x-koordinaten
+    "add R5, R5, #1\n\t"  // inkrementerer y, altså hopper til neste rad
+    "add R9, R9, #1\n\t"  // Inkrementerer y sin counter
+    "cmp R9, R7\n\t"     // sammenligner y sin counter med 10
     "blt loop\n\t"        // hvis mindre enn 10, fortsetter vi å fylle piksler i denne raden
 
     "POP {R4-R7} \n\t"  // gjenoppretter registerene fra stacken
@@ -125,8 +146,22 @@ asm("DrawBlock: \n\t"
     "BX LR"); // returnerer til funksjonen vi ble kalt fra
 
 // TODO: Impelement the DrawBar function in assembly. You need to accept the parameter as outlined in the c declaration above (unsigned int y)
+// DONE. CAN MAYBE ALSO MAKE THE UPPER, MIDDLE AND LOWER PARTS DIFFERENT COLORS
+// antar at unsigned int y kommer gjennom R0-registeret
 asm("DrawBar: \n\t"
-    "BX LR");
+    "    PUSH {LR} \n\t"
+    "    PUSH {R4, R5} \n\t"
+    
+    "    MOV R1, R0\n\t" // flytter start y-koordinat fra input-en i R0 inn i R1
+    "    MOV R0, #0\n\t" // flytter start x-koordinat inn i R0
+    "    MOV R2, #7\n\t" // flytter bar bredden (x-retning) inn i R2
+    "    MOV R3, #45\n\t" // flytter bar høyden (y-retning) inn i R3
+    "    LDR R4, =0x000000ff\n\t" // lagrer blå i R4
+    "    BL DrawBlock\n\t" // kaller DrawBlock funksjonen
+
+    "    POP {R4,R5}\n\t"
+    "    POP {LR} \n\t"
+    "    BX LR");
 
 asm("ReadUart:\n\t"
     "LDR R1, =0xFF201000 \n\t"
@@ -144,6 +179,7 @@ asm("WriteUart:\n\t"
 // TODO: Implement the C functions below
 void draw_ball()
 {
+
 }
 
 void draw_playing_field()
@@ -158,6 +194,18 @@ void update_game_state()
     }
 
     // TODO: Check: game won? game lost?
+    // Må sjekke om ballens høyre x-koordinat er 320. Hvis sant, oppdater til won
+    if (ball.middle_pos_x + 3 >= 320)
+    {
+        currentState = Won;
+        return;
+    }
+    // Må sjekke om ballens venstre x-koordinat er mindre enn 7. Hvis sant, oppdater til lost
+    if (ball.middle_pos_x - 3 <= 7)
+    {
+        currentState = Lost;
+        return;
+    }
 
     // TODO: Update balls position and direction
 
