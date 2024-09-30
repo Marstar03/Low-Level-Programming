@@ -44,9 +44,10 @@ typedef struct _bar
  */
 typedef struct _block
 {
-    // en block er en 15x15 piksel firkant
+    // en blokk er en 15x15 piksel firkant
     unsigned char destroyed;
     unsigned char deleted;
+    // dette er koordinatene til den midterste pikselen til en blokk
     unsigned int pos_x;
     unsigned int pos_y;
     unsigned int color;
@@ -60,9 +61,11 @@ typedef enum _gameState
     Lost = 3,
     Exit = 4,
 } GameState;
+
 GameState currentState = Stopped;
-Ball ball = {0, 0};
-Bar bar = {0, 0};
+Ball ball = {11, 120};
+Bar bar = {4, 120};
+Block blocks[288]; // lager en liste med plass til maks antall blokker vi aksepterer, nemlig 18 * 240/15 = 288
 
 /***
  * Here follow the C declarations for our assembly functions
@@ -179,11 +182,20 @@ asm("WriteUart:\n\t"
 // TODO: Implement the C functions below
 void draw_ball()
 {
+    // vil finne koordinat til øvre venstre piksel, og lage en block
+    unsigned int x = ball.middle_pos_x - 3;
+    unsigned int y = ball.middle_pos_y - 3;
+    DrawBlock(x, y, 7, 7, green);
 
 }
 
 void draw_playing_field()
 {
+    for (int i = 0; i < 16 * n_cols; i++) {
+        if (!blocks[i].destroyed) {
+            DrawBlock(blocks[i].pos_x - 3, blocks[i].pos_y - 3, 15, 15, blocks[i].color);
+        }
+    }
 }
 
 void update_game_state()
@@ -211,6 +223,19 @@ void update_game_state()
 
     // TODO: Hit Check with Blocks
     // HINT: try to only do this check when we potentially have a hit, as it is relatively expensive and can slow down game play a lot
+
+    // for å ikke sjekke for ofte, sjekker vi kun når ballen er innenfor området der det har vært blokker. Trekker fra 5 pga. bruker middle_pos_x, som er 3 unna ytterkanten
+    if (ball.middle_pos_x > 320 - n_cols * 15 - 5)
+    {
+        for (int i = 0; i < 16 * n_cols; i++) {
+            if (blocks[i].destroyed == 0 // sjekker om gjeldende blokk allerede er ødelagt eller ikke
+            && ball.middle_pos_x + 3 > blocks[i].pos_x - 3 && ball.middle_pos_x - 3 < blocks[i].pos_x + 3 // sjekker at x-koordinat er treff
+            && ball.middle_pos_y + 3 > blocks[i].pos_x - 3 && ball.middle_pos_x - 3 < blocks[i].pos_x + 3) // sjekker at y-koordinat er treff
+            {
+                blocks[i].destroyed = 1;
+            }
+        }
+    }
 }
 
 void update_bar_state()
@@ -219,6 +244,37 @@ void update_bar_state()
     // TODO: Read all chars in the UART Buffer and apply the respective bar position updates
     // HINT: w == 77, s == 73
     // HINT Format: 0x00 'Remaining Chars':2 'Ready 0x80':2 'Char 0xXX':2, sample: 0x00018077 (1 remaining character, buffer is ready, current character is 'w')
+    unsigned long long uart_data = 0;
+    unsigned char char_received = 0;
+    
+    // Continuously read from UART buffer until all characters are processed
+    do {
+        uart_data = ReadUart();
+        
+        // Check if the buffer is ready (0x8000 flag set)
+        if (!(uart_data & 0x8000)) {
+            return; // Buffer not ready, abort reading
+        }
+
+        // Extract the actual character received (lower 8 bits of the data)
+        char_received = uart_data & 0xFF;
+
+        // Process the received character
+        if (char_received == 0x77) { // 'w' key
+            // Move the bar/paddle up
+            ball.middle_pos_y -= 15;  // Implement the logic to move the bar upwards
+            if (ball.middle_pos_y < 23) {
+                ball.middle_pos_y = 23; // passer på at baren holder seg innenfor VGA skjermen
+            }
+        } else if (char_received == 0x73) { // 's' key
+            // Move the bar/paddle down
+            ball.middle_pos_y += 15; // Implement the logic to move the bar downwards
+            if (ball.middle_pos_y > 262) {
+                ball.middle_pos_y = 262;
+            }
+        }
+
+    } while ((uart_data & 0xFF0000) >> 16 > 0); // Continue reading if there are more characters remaining
 }
 
 void write(char *str)
@@ -231,9 +287,28 @@ void write(char *str)
     }
 }
 
+void initialize_blocks() {
+    int blockIndex = 0;
+    unsigned int colors[] = {red, green, blue, white}; // Example color palette
+
+    for (int row = 0; row < 16; row++) {
+        for (int col = 0; col < n_cols; col++) {
+            blocks[blockIndex].destroyed = 0;       // All blocks start intact
+            blocks[blockIndex].deleted = 0;         // No blocks are deleted at the start
+            blocks[blockIndex].pos_x = 320 - col * 15 + 7;  // X position of middle pixel based on column.
+            blocks[blockIndex].pos_y = row * 15 + 7; // Y position of middle pixel based on row
+            blocks[blockIndex].color = colors[row % 4];    // Assign colors based on row, for example
+
+            blockIndex++;
+        }
+    }
+}
+
+
 void play()
 {
     ClearScreen();
+    initialize_blocks();
     // HINT: This is the main game loop
     while (1)
     {
@@ -243,9 +318,10 @@ void play()
         {
             break;
         }
+        ClearScreen();
         draw_playing_field();
         draw_ball();
-        DrawBar(120); // TODO: replace the constant value with the current position of the bar
+        DrawBar(bar.middle_pos_y - 23); // Finner y-koordinaten til øverste piksel i baren
     }
     if (currentState == Won)
     {
@@ -278,11 +354,44 @@ void reset()
     } while (remaining > 0);
 
     // TODO: You might want to reset other state in here
+    // resetter koordinatene
+    ball.middle_pos_x = 11;
+    ball.middle_pos_y = 120;
+    bar.middle_pos_y = 120;
+    
+    // Legger til alle blokkene igjen
+    for (int i = 0; i < 16 * n_cols; i++) {
+        blocks[i].destroyed = 0;
+    }
 }
 
 void wait_for_start()
 {
     // TODO: Implement waiting behaviour until the user presses either w/s
+    unsigned long long uart_data = 0;
+    unsigned char char_received = 0;
+
+    write("Press 'w' to start moving up, or 's' to start moving down...\n");
+
+    while (1) {
+        // Continuously read from UART buffer
+        uart_data = ReadUart();
+
+        // Check if the UART buffer is ready (MSB 0x8000 flag set)
+        if (!(uart_data & 0x8000)) {
+            continue; // If not ready, continue waiting
+        }
+
+        // Extract the actual character received (lower 8 bits of the data)
+        char_received = uart_data & 0xFF;
+
+        // Check if the character is 'w' or 's'
+        if (char_received == 0x77 || char_received == 0x73) {
+            // If 'w' or 's' is received, break the loop and start the game
+            write("Game starting...\n");
+            return;
+        }
+    }
 }
 
 int main(int argc, char *argv[])
