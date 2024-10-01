@@ -29,6 +29,7 @@ typedef struct _ball
     // bruker disse til å finne posisjonene til venstre, høyre, øvre og nedre piksel når vi vil sjekke om ballen har truffet noe
     unsigned int middle_pos_x;
     unsigned int middle_pos_y;
+    unsigned int degrees;
 } Ball;
 
 typedef struct _bar
@@ -63,7 +64,7 @@ typedef enum _gameState
 } GameState;
 
 GameState currentState = Stopped;
-Ball ball = {11, 120};
+Ball ball = {11, 120, 90};
 Bar bar = {4, 120};
 Block blocks[288]; // lager en liste med plass til maks antall blokker vi aksepterer, nemlig 18 * 240/15 = 288
 
@@ -94,7 +95,9 @@ asm("ClearScreen: \n\t"
     "    MOV R2, #320\n\t" // flytter VGA bredden inn i R2
     "    MOV R3, #240\n\t" // flytter VGA høyden inn i R3
     "    LDR R4, =0x0000ffff\n\t" // laster hvit inn i R4
+    "    PUSH {R4} \n\t" 
     "    BL DrawBlock\n\t" // kaller DrawBlock funksjonen
+    "    POP {R4} \n\t" 
     "    POP {R4,R5}\n\t"
     "    POP {LR} \n\t"
     "    BX LR");
@@ -114,36 +117,34 @@ asm("SetPixel: \n\t"
 asm("DrawBlock: \n\t"
     // TODO: Here goes your implementation
     "PUSH {LR} \n\t"          // Save the return address
-    "PUSH {R4-R7} \n\t"       // Save registers that will be used
+    "PUSH {R4-R10} \n\t"       // Save registers that will be used
 
-    // antar at vi får x fra R0, y fra R1, width fra R2, height fra R3 og color fra R4
-    // fiks dette: 
-    // ----------------------
+    // antar at vi får x fra R0, y fra R1, width fra R2, height fra R3 og color fra stack
     "MOV R4, R0 \n\t"         // R4 = x
     "MOV R5, R1 \n\t"         // R5 = y
     "MOV R6, R2 \n\t"         // R6 = width
     "MOV R7, R3 \n\t"         // R7 = height
-    "MOV R2, R4 \n\t"        // R2 = color
-    // ----------------------
+    "LDR R8, [SP, #32] \n\t"    // R8 = color (5th argument is on the stack at SP+40)
 
-    "mov R8, #0\n\t"
     "mov R9, #0\n\t"
+    "mov R10, #0\n\t"
     "loop:\n\t"
     "MOV R0, R4\n\t"      // flytter x-verdien fra R4 til R0 for kall til SetPixel
     "MOV R1, R5\n\t"      // flytter y-verdien fra R5 til R1 for kall til SetPixel
+    "MOV R2, R8 \n\t"     // flytter fargen fra R8 til R2 for kall til SetPixel
     "BL SetPixel\n\t"     // kaller SetPixel funksjonen
     "add R4, R4, #1\n\t"  // inkrementerer x med 1
-    "add R8, R8, #1\n\t"  // inkrementerer loop counter som holder styr på hvor i raden vi er
-    "cmp R8, R6\n\t"     // sjekker om counteren er blitt lik 10, altså bredden på blokken
+    "add R9, R9, #1\n\t"  // inkrementerer loop counter som holder styr på hvor i raden vi er
+    "cmp R9, R6\n\t"     // sjekker om counteren er blitt lik 10, altså bredden på blokken
     "blt loop\n\t"        // hvis mindre enn 10, gjentar vi prosessen med oppdatert x-koordinat
     "sub R4, R4, R6\n\t" // hvis lik 10, resetter vi x-koordinaten
-    "mov R8, #0\n\t"      // resetter loop counteren for x-koordinaten
+    "mov R9, #0\n\t"      // resetter loop counteren for x-koordinaten
     "add R5, R5, #1\n\t"  // inkrementerer y, altså hopper til neste rad
-    "add R9, R9, #1\n\t"  // Inkrementerer y sin counter
-    "cmp R9, R7\n\t"     // sammenligner y sin counter med 10
+    "add R10, R10, #1\n\t"  // Inkrementerer y sin counter
+    "cmp R10, R7\n\t"     // sammenligner y sin counter med 10
     "blt loop\n\t"        // hvis mindre enn 10, fortsetter vi å fylle piksler i denne raden
 
-    "POP {R4-R7} \n\t"  // gjenoppretter registerene fra stacken
+    "POP {R4-R10} \n\t"  // gjenoppretter registerene fra stacken
     "POP {LR} \n\t"     // gjenoppretter return adressen fra stacken
     
     "BX LR"); // returnerer til funksjonen vi ble kalt fra
@@ -160,8 +161,10 @@ asm("DrawBar: \n\t"
     "    MOV R2, #7\n\t" // flytter bar bredden (x-retning) inn i R2
     "    MOV R3, #45\n\t" // flytter bar høyden (y-retning) inn i R3
     "    LDR R4, =0x000000ff\n\t" // lagrer blå i R4
+    "    PUSH {R4} \n\t"         // Pusher fargen på stacken
     "    BL DrawBlock\n\t" // kaller DrawBlock funksjonen
 
+    "    POP {R4} \n\t"          // Pop the color off the stack
     "    POP {R4,R5}\n\t"
     "    POP {LR} \n\t"
     "    BX LR");
@@ -220,6 +223,29 @@ void update_game_state()
     }
 
     // TODO: Update balls position and direction
+    // lar ballen bevege seg med 5 piksler per update
+
+    if (ball.degrees == 0) { // ball is going straight up
+        ball.middle_pos_y -= 5;
+    } else if (ball.degrees == 180) { // ball is going straight down
+        ball.middle_pos_y += 5;
+    } else if (ball.degrees == 90) { // ball is going straight right
+        ball.middle_pos_x += 5;
+    } else if (ball.degrees == 270) { // ball is going straight left
+        ball.middle_pos_y -= 5;
+    } else if (ball.degrees == 45) { // ball is going up-right
+        ball.middle_pos_x += 5;
+        ball.middle_pos_y -= 5;
+    } else if (ball.degrees == 135) { // ball is going down-right
+        ball.middle_pos_x += 5;
+        ball.middle_pos_y += 5;
+    } else if (ball.degrees == 315) { // ball is going up-left
+        ball.middle_pos_x -= 5;
+        ball.middle_pos_y -= 5;
+    } else if (ball.degrees == 225) { // ball is going down-left
+        ball.middle_pos_x -= 5;
+        ball.middle_pos_y += 5;
+    }
 
     // TODO: Hit Check with Blocks
     // HINT: try to only do this check when we potentially have a hit, as it is relatively expensive and can slow down game play a lot
@@ -227,13 +253,20 @@ void update_game_state()
     // for å ikke sjekke for ofte, sjekker vi kun når ballen er innenfor området der det har vært blokker. Trekker fra 5 pga. bruker middle_pos_x, som er 3 unna ytterkanten
     if (ball.middle_pos_x > 320 - n_cols * 15 - 5)
     {
+        int hit_block = 0;
         for (int i = 0; i < 16 * n_cols; i++) {
             if (blocks[i].destroyed == 0 // sjekker om gjeldende blokk allerede er ødelagt eller ikke
             && ball.middle_pos_x + 3 > blocks[i].pos_x - 3 && ball.middle_pos_x - 3 < blocks[i].pos_x + 3 // sjekker at x-koordinat er treff
             && ball.middle_pos_y + 3 > blocks[i].pos_x - 3 && ball.middle_pos_x - 3 < blocks[i].pos_x + 3) // sjekker at y-koordinat er treff
             {
                 blocks[i].destroyed = 1;
+                hit_block = 1;
             }
+        }
+        if (hit_block == 1) {
+            // foreløpig lar vi bare ballen sprette tilbake motsatt vei den kom fra
+            // vil senere implementere at den spretter med vinkel, f.eks. 90 grader
+            ball.degrees = (ball.degrees + 180) % 360;
         }
     }
 }
@@ -289,7 +322,8 @@ void write(char *str)
 
 void initialize_blocks() {
     int blockIndex = 0;
-    unsigned int colors[] = {red, green, blue, white}; // Example color palette
+    unsigned int colors[] = {red, green, blue, black}; // Example color palette
+    unsigned int color_index = 0;
 
     for (int row = 0; row < 16; row++) {
         for (int col = 0; col < n_cols; col++) {
@@ -297,9 +331,21 @@ void initialize_blocks() {
             blocks[blockIndex].deleted = 0;         // No blocks are deleted at the start
             blocks[blockIndex].pos_x = 320 - col * 15 + 7;  // X position of middle pixel based on column.
             blocks[blockIndex].pos_y = row * 15 + 7; // Y position of middle pixel based on row
-            blocks[blockIndex].color = colors[row % 4];    // Assign colors based on row, for example
+
+            // velger neste farge via color_index. Passer på å velge annen enn nabo-blokker ved å inkrementere color_index og prøve på nytt hvis fargene er like
+            unsigned int chosen_color = colors[color_index % 4];
+            if (row > 0 && blocks[blockIndex - n_cols].color == chosen_color) {
+                color_index++;
+                chosen_color = colors[color_index % 4];
+            }
+            if (col > 0 && blocks[blockIndex - 1].color == chosen_color) {
+                color_index++;
+                chosen_color = colors[color_index % 4];
+            }
+            blocks[blockIndex].color = chosen_color;    // Assign colors based on row, for example
 
             blockIndex++;
+            color_index++;
         }
     }
 }
@@ -309,6 +355,7 @@ void play()
 {
     ClearScreen();
     initialize_blocks();
+    currentState = Running;
     // HINT: This is the main game loop
     while (1)
     {
@@ -318,7 +365,7 @@ void play()
         {
             break;
         }
-        ClearScreen();
+        //ClearScreen();
         draw_playing_field();
         draw_ball();
         DrawBar(bar.middle_pos_y - 23); // Finner y-koordinaten til øverste piksel i baren
@@ -367,31 +414,32 @@ void reset()
 
 void wait_for_start()
 {
+    return;
     // TODO: Implement waiting behaviour until the user presses either w/s
-    unsigned long long uart_data = 0;
-    unsigned char char_received = 0;
+    // unsigned long long uart_data = 0;
+    // unsigned char char_received = 0;
 
-    write("Press 'w' to start moving up, or 's' to start moving down...\n");
+    // write("Press 'w' to start moving up, or 's' to start moving down...\n");
 
-    while (1) {
-        // Continuously read from UART buffer
-        uart_data = ReadUart();
+    // while (1) {
+    //     // Continuously read from UART buffer
+    //     uart_data = ReadUart();
 
-        // Check if the UART buffer is ready (MSB 0x8000 flag set)
-        if (!(uart_data & 0x8000)) {
-            continue; // If not ready, continue waiting
-        }
+    //     // Check if the UART buffer is ready (MSB 0x8000 flag set)
+    //     if (!(uart_data & 0x8000)) {
+    //         continue; // If not ready, continue waiting
+    //     }
 
-        // Extract the actual character received (lower 8 bits of the data)
-        char_received = uart_data & 0xFF;
+    //     // Extract the actual character received (lower 8 bits of the data)
+    //     char_received = uart_data & 0xFF;
 
-        // Check if the character is 'w' or 's'
-        if (char_received == 0x77 || char_received == 0x73) {
-            // If 'w' or 's' is received, break the loop and start the game
-            write("Game starting...\n");
-            return;
-        }
-    }
+    //     // Check if the character is 'w' or 's'
+    //     if (char_received == 0x77 || char_received == 0x73) {
+    //         // If 'w' or 's' is received, break the loop and start the game
+    //         write("Game starting...\n");
+    //         return;
+    //     }
+    // }
 }
 
 int main(int argc, char *argv[])
