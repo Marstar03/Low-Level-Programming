@@ -195,8 +195,8 @@ void draw_ball()
 void draw_playing_field()
 {
     for (int i = 0; i < 16 * n_cols; i++) {
-        if (!blocks[i].destroyed) {
-            DrawBlock(blocks[i].pos_x - 3, blocks[i].pos_y - 3, 15, 15, blocks[i].color);
+        if (blocks[i].destroyed == 1) {
+            DrawBlock(blocks[i].pos_x - 7, blocks[i].pos_y - 7, 15, 15, white);
         }
     }
 }
@@ -221,6 +221,8 @@ void update_game_state()
         currentState = Lost;
         return;
     }
+    // Fjerner ballen fra ui
+    DrawBlock(ball.middle_pos_x - 3, ball.middle_pos_y - 3, 7, 7, white);
 
     // TODO: Update balls position and direction
     // lar ballen bevege seg med 5 piksler per update
@@ -232,7 +234,7 @@ void update_game_state()
     } else if (ball.degrees == 90) { // ball is going straight right
         ball.middle_pos_x += 5;
     } else if (ball.degrees == 270) { // ball is going straight left
-        ball.middle_pos_y -= 5;
+        ball.middle_pos_x -= 5;
     } else if (ball.degrees == 45) { // ball is going up-right
         ball.middle_pos_x += 5;
         ball.middle_pos_y -= 5;
@@ -256,8 +258,8 @@ void update_game_state()
         int hit_block = 0;
         for (int i = 0; i < 16 * n_cols; i++) {
             if (blocks[i].destroyed == 0 // sjekker om gjeldende blokk allerede er ødelagt eller ikke
-            && ball.middle_pos_x + 3 > blocks[i].pos_x - 3 && ball.middle_pos_x - 3 < blocks[i].pos_x + 3 // sjekker at x-koordinat er treff
-            && ball.middle_pos_y + 3 > blocks[i].pos_x - 3 && ball.middle_pos_x - 3 < blocks[i].pos_x + 3) // sjekker at y-koordinat er treff
+            && ball.middle_pos_x + 3 > blocks[i].pos_x - 7 && ball.middle_pos_x - 3 < blocks[i].pos_x + 7 // sjekker at x-koordinat er treff
+            && ball.middle_pos_y + 3 > blocks[i].pos_y - 7 && ball.middle_pos_y - 3 < blocks[i].pos_y + 7) // sjekker at y-koordinat er treff
             {
                 blocks[i].destroyed = 1;
                 hit_block = 1;
@@ -266,14 +268,21 @@ void update_game_state()
         if (hit_block == 1) {
             // foreløpig lar vi bare ballen sprette tilbake motsatt vei den kom fra
             // vil senere implementere at den spretter med vinkel, f.eks. 90 grader
-            ball.degrees = (ball.degrees + 180) % 360;
+            //ball.degrees = (ball.degrees + 180) % 270;
+            //ball.degrees = 270;
+            if (ball.degrees >= 180) {
+                ball.degrees -= 180;
+            } else {
+                ball.degrees += 180;
+            }
         }
     }
+
 }
 
 void update_bar_state()
 {
-    int remaining = 0;
+    //int remaining = 0;
     // TODO: Read all chars in the UART Buffer and apply the respective bar position updates
     // HINT: w == 77, s == 73
     // HINT Format: 0x00 'Remaining Chars':2 'Ready 0x80':2 'Char 0xXX':2, sample: 0x00018077 (1 remaining character, buffer is ready, current character is 'w')
@@ -295,17 +304,18 @@ void update_bar_state()
         // Process the received character
         if (char_received == 0x77) { // 'w' key
             // Move the bar/paddle up
-            ball.middle_pos_y -= 15;  // Implement the logic to move the bar upwards
-            if (ball.middle_pos_y < 23) {
-                ball.middle_pos_y = 23; // passer på at baren holder seg innenfor VGA skjermen
+            bar.middle_pos_y -= 15;  // Implement the logic to move the bar upwards
+            if (bar.middle_pos_y < 23) {
+                bar.middle_pos_y = 23; // passer på at baren holder seg innenfor VGA skjermen
             }
         } else if (char_received == 0x73) { // 's' key
             // Move the bar/paddle down
-            ball.middle_pos_y += 15; // Implement the logic to move the bar downwards
-            if (ball.middle_pos_y > 262) {
-                ball.middle_pos_y = 262;
+            bar.middle_pos_y += 15; // Implement the logic to move the bar downwards
+            if (bar.middle_pos_y > 262) {
+                bar.middle_pos_y = 262;
             }
         }
+        DrawBar(bar.middle_pos_y - 23); // oppdaterer baren i ui
 
     } while ((uart_data & 0xFF0000) >> 16 > 0); // Continue reading if there are more characters remaining
 }
@@ -342,7 +352,9 @@ void initialize_blocks() {
                 color_index++;
                 chosen_color = colors[color_index % 4];
             }
-            blocks[blockIndex].color = chosen_color;    // Assign colors based on row, for example
+            blocks[blockIndex].color = chosen_color;
+
+            DrawBlock(320 - col * 15, row * 15, 15, 15, chosen_color); // tegner selve blokken
 
             blockIndex++;
             color_index++;
