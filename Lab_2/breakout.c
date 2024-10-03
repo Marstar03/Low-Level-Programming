@@ -195,9 +195,18 @@ void draw_ball()
 void draw_playing_field()
 {
     for (int i = 0; i < 16 * n_cols; i++) {
-        if (blocks[i].destroyed == 1) {
+        if (blocks[i].destroyed == 1 && blocks[i].deleted == 0) {
             DrawBlock(blocks[i].pos_x - 7, blocks[i].pos_y - 7, 15, 15, white);
+            blocks[i].deleted = 1;
         }
+    }
+}
+
+void wait()
+{
+    unsigned int j = 0;
+    for (int i = 0; i < 16 * n_cols; i++) {
+        j++;
     }
 }
 
@@ -216,37 +225,37 @@ void update_game_state()
         return;
     }
     // Må sjekke om ballens venstre x-koordinat er mindre enn 7. Hvis sant, oppdater til lost
-    if (ball.middle_pos_x - 3 <= 7)
+    if (ball.middle_pos_x - 3 <= 1)
     {
         currentState = Lost;
         return;
     }
-    // Fjerner ballen fra ui
+    // Fjerner ballens gamle posisjon fra ui
     DrawBlock(ball.middle_pos_x - 3, ball.middle_pos_y - 3, 7, 7, white);
 
     // TODO: Update balls position and direction
     // lar ballen bevege seg med 5 piksler per update
 
     if (ball.degrees == 0) { // ball is going straight up
-        ball.middle_pos_y -= 5;
+        ball.middle_pos_y -= 1;
     } else if (ball.degrees == 180) { // ball is going straight down
-        ball.middle_pos_y += 5;
+        ball.middle_pos_y += 1;
     } else if (ball.degrees == 90) { // ball is going straight right
-        ball.middle_pos_x += 5;
+        ball.middle_pos_x += 1;
     } else if (ball.degrees == 270) { // ball is going straight left
-        ball.middle_pos_x -= 5;
+        ball.middle_pos_x -= 1;
     } else if (ball.degrees == 45) { // ball is going up-right
-        ball.middle_pos_x += 5;
-        ball.middle_pos_y -= 5;
+        ball.middle_pos_x += 1;
+        ball.middle_pos_y -= 1;
     } else if (ball.degrees == 135) { // ball is going down-right
-        ball.middle_pos_x += 5;
-        ball.middle_pos_y += 5;
+        ball.middle_pos_x += 1;
+        ball.middle_pos_y += 1;
     } else if (ball.degrees == 315) { // ball is going up-left
-        ball.middle_pos_x -= 5;
-        ball.middle_pos_y -= 5;
+        ball.middle_pos_x -= 1;
+        ball.middle_pos_y -= 1;
     } else if (ball.degrees == 225) { // ball is going down-left
-        ball.middle_pos_x -= 5;
-        ball.middle_pos_y += 5;
+        ball.middle_pos_x -= 1;
+        ball.middle_pos_y += 1;
     }
 
     // TODO: Hit Check with Blocks
@@ -278,46 +287,52 @@ void update_game_state()
         }
     }
 
+    // Sjekker så om ballen har truffet baren. I så fall får vi den til å snu retning igjen
+    if (ball.middle_pos_x - 3 <= bar.middle_pos_x && ball.middle_pos_y - 3 <= bar.middle_pos_y + 23 
+        && ball.middle_pos_y + 3 >= bar.middle_pos_y - 23) {
+        
+        if (ball.degrees >= 180) {
+            ball.degrees -= 180;
+        } else {
+            ball.degrees += 180;
+        }
+    }
+
 }
 
 void update_bar_state()
 {
-    //int remaining = 0;
-    // TODO: Read all chars in the UART Buffer and apply the respective bar position updates
-    // HINT: w == 77, s == 73
-    // HINT Format: 0x00 'Remaining Chars':2 'Ready 0x80':2 'Char 0xXX':2, sample: 0x00018077 (1 remaining character, buffer is ready, current character is 'w')
-    unsigned long long uart_data = 0;
-    unsigned char char_received = 0;
-    
-    // Continuously read from UART buffer until all characters are processed
-    do {
-        uart_data = ReadUart();
-        
-        // Check if the buffer is ready (0x8000 flag set)
-        if (!(uart_data & 0x8000)) {
-            return; // Buffer not ready, abort reading
+    int remaining = 0;
+    do
+    {
+        unsigned long long out = ReadUart();
+        if (!(out & 0x8000))
+        {
+            // not valid - abort reading
+            return;
         }
-
-        // Extract the actual character received (lower 8 bits of the data)
-        char_received = uart_data & 0xFF;
+        unsigned char char_received = out & 0xFF;
 
         // Process the received character
         if (char_received == 0x77) { // 'w' key
+            DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white);
             // Move the bar/paddle up
             bar.middle_pos_y -= 15;  // Implement the logic to move the bar upwards
-            if (bar.middle_pos_y < 23) {
-                bar.middle_pos_y = 23; // passer på at baren holder seg innenfor VGA skjermen
+            if (bar.middle_pos_y - 24 <= 0) {
+                bar.middle_pos_y = 25; // passer på at baren holder seg innenfor VGA skjermen
             }
+            DrawBar(bar.middle_pos_y - 23); // oppdaterer baren i ui
         } else if (char_received == 0x73) { // 's' key
+            DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white);
             // Move the bar/paddle down
             bar.middle_pos_y += 15; // Implement the logic to move the bar downwards
-            if (bar.middle_pos_y > 262) {
-                bar.middle_pos_y = 262;
+            if (bar.middle_pos_y + 24 >= 240) {
+                bar.middle_pos_y = 215;
             }
+            DrawBar(bar.middle_pos_y - 23); // oppdaterer baren i ui
         }
-        DrawBar(bar.middle_pos_y - 23); // oppdaterer baren i ui
-
-    } while ((uart_data & 0xFF0000) >> 16 > 0); // Continue reading if there are more characters remaining
+        remaining = (out & 0xFF0000) >> 4;
+    } while (remaining > 0);
 }
 
 void write(char *str)
@@ -378,6 +393,7 @@ void play()
             break;
         }
         //ClearScreen();
+        wait();
         draw_playing_field();
         draw_ball();
         DrawBar(bar.middle_pos_y - 23); // Finner y-koordinaten til øverste piksel i baren
@@ -421,6 +437,7 @@ void reset()
     // Legger til alle blokkene igjen
     for (int i = 0; i < 16 * n_cols; i++) {
         blocks[i].destroyed = 0;
+        blocks[i].deleted = 0;
     }
 }
 
@@ -468,6 +485,7 @@ int main(int argc, char *argv[])
         {
             break;
         }
+        return 0;
     }
     return 0;
 }
