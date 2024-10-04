@@ -54,6 +54,8 @@ typedef struct _block
     unsigned int pos_x;
     unsigned int pos_y;
     unsigned int color;
+    unsigned int row;
+    unsigned int col;
 } Block;
 
 typedef enum _gameState
@@ -272,25 +274,40 @@ void update_game_state()
 
             if (blocks[i].destroyed == 0) {
 
-                if (ball.middle_pos_x + 3 > blocks[i].pos_x - 7 && ball.middle_pos_x - 3 < blocks[i].pos_x + 7) {
-                    if (ball.middle_pos_y + 3 == blocks[i].pos_y - 7) { // ball bunn treffer blokk topp
+                if (ball.middle_pos_x >= blocks[i].pos_x - 7 && ball.middle_pos_x <= blocks[i].pos_x + 7) {
+                    if (ball.middle_pos_y + 3 == blocks[i].pos_y - 8) { // ball bunn treffer blokk topp
                         if (ball.degrees == 45){
                             ball.degrees = 135;
                         } else if (ball.degrees == 315) {
                             ball.degrees = 225;
                         }
                         blocks[i].destroyed = 1;
-                    } else if (ball.middle_pos_y - 3 == blocks[i].pos_y + 7) { // ball topp treffer blokk bunn
+                        
+                        // dersom ballens midt bunn piksel treffer hjørnepikselen til blokken, vil naboblokken også ødelegges
+                        if (ball.middle_pos_x == blocks[i].pos_x - 7 && blocks[i].col > 0) { // øvre venstre hjørne
+                            blocks[i - 1].destroyed = 1;
+                        } else if (ball.middle_pos_x == blocks[i].pos_x + 7 && blocks[i].col < n_cols - 1) { // øvre høyre hjørne
+                            blocks[i + 1].destroyed = 1;
+                        }
+
+                    } else if (ball.middle_pos_y - 3 == blocks[i].pos_y + 8) { // ball topp treffer blokk bunn
                         if (ball.degrees == 135){
                             ball.degrees = 45;
                         } else if (ball.degrees == 225) {
                             ball.degrees = 315;
                         }
                         blocks[i].destroyed = 1;
+
+                        // dersom ballens midt topp piksel treffer hjørnepikselen til blokken, vil naboblokken også ødelegges
+                        if (ball.middle_pos_x == blocks[i].pos_x - 7 && blocks[i].col > 0) { // nedre venstre hjørne
+                            blocks[i - 1].destroyed = 1;
+                        } else if (ball.middle_pos_x == blocks[i].pos_x + 7 && blocks[i].col < n_cols - 1) { // nedre høyre hjørne
+                            blocks[i + 1].destroyed = 1;
+                        }
                     }
 
-                } else if (ball.middle_pos_y + 3 > blocks[i].pos_y - 7 && ball.middle_pos_y - 3 < blocks[i].pos_y + 7) {
-                    if (ball.middle_pos_x + 3 == blocks[i].pos_x - 7) { // ball høyre treffer blokk venstre
+                } else if (ball.middle_pos_y >= blocks[i].pos_y - 7 && ball.middle_pos_y <= blocks[i].pos_y + 7) {
+                    if (ball.middle_pos_x + 3 == blocks[i].pos_x - 8) { // ball høyre treffer blokk venstre
                         if (ball.degrees == 45){
                             ball.degrees = 315;
                         } else if (ball.degrees == 90) {
@@ -299,13 +316,27 @@ void update_game_state()
                             ball.degrees = 225;
                         }
                         blocks[i].destroyed = 1;
-                    } else if (ball.middle_pos_x - 3 == blocks[i].pos_x + 7) { // ball venstre treffer blokk høyre
+
+                        if (ball.middle_pos_y == blocks[i].pos_y - 7 && blocks[i].row > 0) { // øvre venstre hjørne
+                            blocks[i - n_cols].destroyed = 1;
+                        } else if (ball.middle_pos_y == blocks[i].pos_y + 7 && blocks[i].row < 16 - 1) { // nedre venstre hjørne
+                            blocks[i + n_cols].destroyed = 1;
+                        }
+
+                    } else if (ball.middle_pos_x - 3 == blocks[i].pos_x + 8) { // ball venstre treffer blokk høyre
                         if (ball.degrees == 315){
                             ball.degrees = 45;
                         } else if (ball.degrees == 225) {
                             ball.degrees = 135;
                         }
                         blocks[i].destroyed = 1;
+
+                        if (ball.middle_pos_y == blocks[i].pos_y - 7 && blocks[i].row > 0) { // øvre høyre hjørne
+                            blocks[i - n_cols].destroyed = 1;
+                        } else if (ball.middle_pos_y == blocks[i].pos_y + 7 && blocks[i].row < 16 - 1) { // nedre høyre hjørne
+                            blocks[i + n_cols].destroyed = 1;
+                        }
+
                     }
 
                 }
@@ -410,6 +441,8 @@ void initialize_blocks() {
             blocks[blockIndex].deleted = 0;         // No blocks are deleted at the start
             blocks[blockIndex].pos_x = 320 - col * 15 + 7;  // X position of middle pixel based on column.
             blocks[blockIndex].pos_y = row * 15 + 7; // Y position of middle pixel based on row
+            blocks[blockIndex].row = row;
+            blocks[blockIndex].col = col;
 
             // velger neste farge via color_index. Passer på å velge annen enn nabo-blokker ved å inkrementere color_index og prøve på nytt hvis fargene er like
             unsigned int chosen_color = colors[color_index % 4];
