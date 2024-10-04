@@ -30,6 +30,8 @@ typedef struct _ball
     unsigned int middle_pos_x;
     unsigned int middle_pos_y;
     unsigned int degrees;
+    unsigned int middle_pos_x_old;
+    unsigned int middle_pos_y_old;
 } Ball;
 
 typedef struct _bar
@@ -64,8 +66,8 @@ typedef enum _gameState
 } GameState;
 
 GameState currentState = Stopped;
-Ball ball = {11, 120, 90};
-Bar bar = {4, 120};
+Ball ball = {11, 120, 90, 0, 0};
+Bar bar = {4, 112};
 Block blocks[288]; // lager en liste med plass til maks antall blokker vi aksepterer, nemlig 18 * 240/15 = 288
 
 /***
@@ -186,9 +188,8 @@ asm("WriteUart:\n\t"
 void draw_ball()
 {
     // vil finne koordinat til øvre venstre piksel, og lage en block
-    unsigned int x = ball.middle_pos_x - 3;
-    unsigned int y = ball.middle_pos_y - 3;
-    DrawBlock(x, y, 7, 7, green);
+    DrawBlock(ball.middle_pos_x_old - 3, ball.middle_pos_y_old - 3, 7, 7, white);
+    DrawBlock(ball.middle_pos_x - 3, ball.middle_pos_y - 3, 7, 7, green);
 
 }
 
@@ -204,14 +205,17 @@ void draw_playing_field()
 
 void wait()
 {
-    unsigned int j = 0;
-    for (int i = 0; i < 16 * n_cols; i++) {
+    volatile int j = 0;
+    while (j < 10000) {
         j++;
     }
 }
 
 void update_game_state()
 {
+    ball.middle_pos_x_old = ball.middle_pos_x;
+    ball.middle_pos_y_old = ball.middle_pos_y;
+
     if (currentState != Running)
     {
         return;
@@ -225,16 +229,16 @@ void update_game_state()
         return;
     }
     // Må sjekke om ballens venstre x-koordinat er mindre enn 7. Hvis sant, oppdater til lost
-    if (ball.middle_pos_x - 3 <= 1)
+    if (ball.middle_pos_x - 3 < 7)
     {
         currentState = Lost;
         return;
     }
     // Fjerner ballens gamle posisjon fra ui
-    DrawBlock(ball.middle_pos_x - 3, ball.middle_pos_y - 3, 7, 7, white);
+    //DrawBlock(ball.middle_pos_x - 3, ball.middle_pos_y - 3, 7, 7, white);
 
     // TODO: Update balls position and direction
-    // lar ballen bevege seg med 5 piksler per update
+    // lar ballen bevege seg med 1 piksel per update
 
     if (ball.degrees == 0) { // ball is going straight up
         ball.middle_pos_y -= 1;
@@ -264,37 +268,83 @@ void update_game_state()
     // for å ikke sjekke for ofte, sjekker vi kun når ballen er innenfor området der det har vært blokker. Trekker fra 5 pga. bruker middle_pos_x, som er 3 unna ytterkanten
     if (ball.middle_pos_x > 320 - n_cols * 15 - 5)
     {
-        int hit_block = 0;
         for (int i = 0; i < 16 * n_cols; i++) {
-            if (blocks[i].destroyed == 0 // sjekker om gjeldende blokk allerede er ødelagt eller ikke
-            && ball.middle_pos_x + 3 > blocks[i].pos_x - 7 && ball.middle_pos_x - 3 < blocks[i].pos_x + 7 // sjekker at x-koordinat er treff
-            && ball.middle_pos_y + 3 > blocks[i].pos_y - 7 && ball.middle_pos_y - 3 < blocks[i].pos_y + 7) // sjekker at y-koordinat er treff
-            {
-                blocks[i].destroyed = 1;
-                hit_block = 1;
-            }
-        }
-        if (hit_block == 1) {
-            // foreløpig lar vi bare ballen sprette tilbake motsatt vei den kom fra
-            // vil senere implementere at den spretter med vinkel, f.eks. 90 grader
-            //ball.degrees = (ball.degrees + 180) % 270;
-            //ball.degrees = 270;
-            if (ball.degrees >= 180) {
-                ball.degrees -= 180;
-            } else {
-                ball.degrees += 180;
+
+            if (blocks[i].destroyed == 0) {
+
+                if (ball.middle_pos_x + 3 > blocks[i].pos_x - 7 && ball.middle_pos_x - 3 < blocks[i].pos_x + 7) {
+                    if (ball.middle_pos_y + 3 == blocks[i].pos_y - 7) { // ball bunn treffer blokk topp
+                        if (ball.degrees == 45){
+                            ball.degrees = 135;
+                        } else if (ball.degrees == 315) {
+                            ball.degrees = 225;
+                        }
+                        blocks[i].destroyed = 1;
+                    } else if (ball.middle_pos_y - 3 == blocks[i].pos_y + 7) { // ball topp treffer blokk bunn
+                        if (ball.degrees == 135){
+                            ball.degrees = 45;
+                        } else if (ball.degrees == 225) {
+                            ball.degrees = 315;
+                        }
+                        blocks[i].destroyed = 1;
+                    }
+
+                } else if (ball.middle_pos_y + 3 > blocks[i].pos_y - 7 && ball.middle_pos_y - 3 < blocks[i].pos_y + 7) {
+                    if (ball.middle_pos_x + 3 == blocks[i].pos_x - 7) { // ball høyre treffer blokk venstre
+                        if (ball.degrees == 45){
+                            ball.degrees = 315;
+                        } else if (ball.degrees == 90) {
+                            ball.degrees = 270;
+                        } else if (ball.degrees == 135) {
+                            ball.degrees = 225;
+                        }
+                        blocks[i].destroyed = 1;
+                    } else if (ball.middle_pos_x - 3 == blocks[i].pos_x + 7) { // ball venstre treffer blokk høyre
+                        if (ball.degrees == 315){
+                            ball.degrees = 45;
+                        } else if (ball.degrees == 225) {
+                            ball.degrees = 135;
+                        }
+                        blocks[i].destroyed = 1;
+                    }
+
+                }
+
             }
         }
     }
 
+    // sjekker om ballen har truffet topp eller bunn. I så fall, endrer vi vinkel
+    if (ball.middle_pos_y - 4 == 0) { // treffer topp
+        if (ball.degrees == 45) {
+            ball.degrees = 135;
+        } else if (ball.degrees == 315) {
+            ball.degrees = 225;
+        } else if (ball.degrees == 0) {
+            ball.degrees = 180;
+        }
+    } else if (ball.middle_pos_y + 4 == 240) { // treffer bunn
+        if (ball.degrees == 135) {
+            ball.degrees = 45;
+        } else if (ball.degrees == 225) {
+            ball.degrees = 315;
+        } else if (ball.degrees == 180) {
+            ball.degrees = 0;
+        }
+    }
+
     // Sjekker så om ballen har truffet baren. I så fall får vi den til å snu retning igjen
-    if (ball.middle_pos_x - 3 <= bar.middle_pos_x && ball.middle_pos_y - 3 <= bar.middle_pos_y + 23 
-        && ball.middle_pos_y + 3 >= bar.middle_pos_y - 23) {
-        
-        if (ball.degrees >= 180) {
-            ball.degrees -= 180;
-        } else {
-            ball.degrees += 180;
+    if (ball.middle_pos_x - 3 == bar.middle_pos_x + 3) {
+        if (ball.middle_pos_y <= bar.middle_pos_y + 7 && ball.middle_pos_y >= bar.middle_pos_y - 7) {
+            ball.degrees = 90;
+        } else if (ball.middle_pos_y <= bar.middle_pos_y + 23 && ball.middle_pos_y >= bar.middle_pos_y + 8) {
+            ball.degrees = 135;
+        } else if (ball.middle_pos_y <= bar.middle_pos_y - 8 && ball.middle_pos_y >= bar.middle_pos_y - 23) {
+            ball.degrees = 45;
+        } else if (ball.middle_pos_y - 3 <= bar.middle_pos_y + 23 && ball.middle_pos_y + 3 > bar.middle_pos_y + 23) {
+            ball.degrees = 135;
+        } else if (ball.middle_pos_y + 3 >= bar.middle_pos_y - 23 && ball.middle_pos_y - 3 < bar.middle_pos_y - 23) {
+            ball.degrees = 45;
         }
     }
 
@@ -302,6 +352,7 @@ void update_game_state()
 
 void update_bar_state()
 {
+    int move_step = 15;
     int remaining = 0;
     do
     {
@@ -312,22 +363,25 @@ void update_bar_state()
             return;
         }
         unsigned char char_received = out & 0xFF;
+        if (char_received == 0x0a) {
+            currentState = Exit;
 
-        // Process the received character
-        if (char_received == 0x77) { // 'w' key
-            DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white);
-            // Move the bar/paddle up
-            bar.middle_pos_y -= 15;  // Implement the logic to move the bar upwards
-            if (bar.middle_pos_y - 24 <= 0) {
-                bar.middle_pos_y = 25; // passer på at baren holder seg innenfor VGA skjermen
+        } else if (char_received == 0x77) { // 'w' key
+            DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white); // fjerner gammel bar fra ui
+
+            if (bar.middle_pos_y - 23 - move_step >= 0) {
+                bar.middle_pos_y -= move_step;  // Implement the logic to move the bar upwards
+            } else {
+                bar.middle_pos_y = 23;
             }
             DrawBar(bar.middle_pos_y - 23); // oppdaterer baren i ui
         } else if (char_received == 0x73) { // 's' key
-            DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white);
-            // Move the bar/paddle down
-            bar.middle_pos_y += 15; // Implement the logic to move the bar downwards
-            if (bar.middle_pos_y + 24 >= 240) {
-                bar.middle_pos_y = 215;
+            DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white); // fjerner gammel bar fra ui
+
+            if (bar.middle_pos_y + 23 + move_step <= 240) {
+                bar.middle_pos_y += move_step;
+            } else {
+                bar.middle_pos_y = 217;
             }
             DrawBar(bar.middle_pos_y - 23); // oppdaterer baren i ui
         }
@@ -369,7 +423,7 @@ void initialize_blocks() {
             }
             blocks[blockIndex].color = chosen_color;
 
-            DrawBlock(320 - col * 15, row * 15, 15, 15, chosen_color); // tegner selve blokken
+            DrawBlock(320 - col * 15, row * 15, 15 - 1, 15 - 1, chosen_color); // tegner selve blokken
 
             blockIndex++;
             color_index++;
@@ -474,6 +528,11 @@ void wait_for_start()
 int main(int argc, char *argv[])
 {
     ClearScreen();
+    if (n_cols < 1 || n_cols > 18) {
+        char *illegal_n_cols = "This is not a playable configuration. n_cols must be in range [1, 18].";
+        write(illegal_n_cols);
+        return 0;
+    }
 
     // HINT: This loop allows the user to restart the game after loosing/winning the previous game
     while (1)
