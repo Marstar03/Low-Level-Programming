@@ -27,19 +27,19 @@ typedef struct _ball
     // ballen er en 7x7 piksel firkant
     // dette er koordinatene til den midterste pikselen til ballen
     // bruker disse til å finne posisjonene til venstre, høyre, øvre og nedre piksel når vi vil sjekke om ballen har truffet noe
-    unsigned int middle_pos_x;
-    unsigned int middle_pos_y;
+    int middle_pos_x;
+    int middle_pos_y;
     unsigned int degrees;
-    unsigned int middle_pos_x_old;
-    unsigned int middle_pos_y_old;
+    int middle_pos_x_old;
+    int middle_pos_y_old;
 } Ball;
 
 typedef struct _bar
 {
     // baren er en 7x45 piksel firkant
     // dette er koordinatene til den midterste pikselen til baren
-    unsigned int middle_pos_x;
-    unsigned int middle_pos_y;
+    int middle_pos_x;
+    int middle_pos_y;
 } Bar;
 
 /***
@@ -128,7 +128,7 @@ asm("DrawBlock: \n\t"
     "MOV R5, R1 \n\t"         // R5 = y
     "MOV R6, R2 \n\t"         // R6 = width
     "MOV R7, R3 \n\t"         // R7 = height
-    "LDR R8, [SP, #32] \n\t"    // R8 = color (5th argument is on the stack at SP+40)
+    "LDR R8, [SP, #32] \n\t"    // R8 = color (5th argument is on the stack at SP+32)
 
     "mov R9, #0\n\t"
     "mov R10, #0\n\t"
@@ -195,6 +195,7 @@ void draw_ball()
 
 }
 
+// denne funksjonen vil fjerne blokker som har blitt truffet fra UI, og slette dem
 void draw_playing_field()
 {
     for (int i = 0; i < 16 * n_cols; i++) {
@@ -215,6 +216,7 @@ void wait()
 
 void update_game_state()
 {
+    // setter gammel ball-koordinater før vi oppdaterer til nye
     ball.middle_pos_x_old = ball.middle_pos_x;
     ball.middle_pos_y_old = ball.middle_pos_y;
 
@@ -224,20 +226,21 @@ void update_game_state()
     }
 
     // TODO: Check: game won? game lost?
-    // Må sjekke om ballens høyre x-koordinat er 320. Hvis sant, oppdater til won
+    // DONE
+
+    // Sjekker om ballens høyre x-koordinat er 320. Hvis sant, oppdater til won
     if (ball.middle_pos_x + 3 >= 320)
     {
         currentState = Won;
         return;
     }
-    // Må sjekke om ballens venstre x-koordinat er mindre enn 7. Hvis sant, oppdater til lost
+
+    // Sjekker om ballens venstre x-koordinat er mindre enn 7. Hvis sant, oppdater til lost
     if (ball.middle_pos_x - 3 < 7)
     {
         currentState = Lost;
         return;
     }
-    // Fjerner ballens gamle posisjon fra ui
-    //DrawBlock(ball.middle_pos_x - 3, ball.middle_pos_y - 3, 7, 7, white);
 
     // TODO: Update balls position and direction
     // lar ballen bevege seg med 1 piksel per update
@@ -401,7 +404,7 @@ void update_bar_state()
             DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white); // fjerner gammel bar fra ui
 
             if (bar.middle_pos_y - 23 - move_step >= 0) {
-                bar.middle_pos_y -= move_step;  // Implement the logic to move the bar upwards
+                bar.middle_pos_y -= move_step;
             } else {
                 bar.middle_pos_y = 23;
             }
