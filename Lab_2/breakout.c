@@ -208,7 +208,7 @@ void draw_playing_field()
 {
     for (int i = 0; i < 16 * n_cols; i++) {
         if (blocks[i].destroyed == 1 && blocks[i].deleted == 0) {
-            DrawBlock(blocks[i].pos_x - 7, blocks[i].pos_y - 7, 15, 15, white);
+            DrawBlock(blocks[i].pos_x - 8, blocks[i].pos_y - 7, 15, 15, white);
             blocks[i].deleted = 1;
         }
     }
@@ -290,12 +290,13 @@ void update_game_state()
             // Checking that the block hasnt already been destroyed
             if (blocks[i].destroyed == 0) {
 
-                // First checking if a ball corner is going straight towards a block corner. If so, it makes sense that the direction turns 180 degrees
+                // First checking if a ball corner is going straight towards a block corner
                 if ((ball.middle_pos_x + 3 == blocks[i].pos_x - 8 && ball.middle_pos_y + 3 == blocks[i].pos_y - 8 && ball.degrees == 135)
                 || (ball.middle_pos_x - 3 == blocks[i].pos_x + 8 && ball.middle_pos_y + 3 == blocks[i].pos_y - 8 && ball.degrees == 225)
                 || (ball.middle_pos_x + 3 == blocks[i].pos_x - 8 && ball.middle_pos_y - 3 == blocks[i].pos_y + 8 && ball.degrees == 45)
                 || (ball.middle_pos_x - 3 == blocks[i].pos_x + 8 && ball.middle_pos_y - 3 == blocks[i].pos_y + 8 && ball.degrees == 315)) {
 
+                    // If so, it makes sense that the direction turns 180 degrees
                     ball.degrees = (ball.degrees + 180) % 360;
                     blocks[i].destroyed = 1;
 
@@ -303,25 +304,25 @@ void update_game_state()
                 } else if (ball.middle_pos_x >= blocks[i].pos_x - 7 && ball.middle_pos_x <= blocks[i].pos_x + 7) {
                     // Checking if the bottom middle y has hit the top of the block (ball bottom hits block top)
                     if (ball.middle_pos_y + 3 >= blocks[i].pos_y - 8 && ball.middle_pos_y + 3 < blocks[i].pos_y + 7) { 
-                        if (ball.degrees == 45){
-                            ball.degrees = 135;
-                        } else if (ball.degrees == 315) {
-                            ball.degrees = 225;
+                        if (ball.degrees == 135){
+                            ball.degrees = 45;
+                        } else if (ball.degrees == 225) {
+                            ball.degrees = 315;
                         }
                         blocks[i].destroyed = 1;
                         
-                        // If the bottom middle hits the corner pixel if the block, then the neighbour block will also be destroyed
+                        // If the bottom middle hits the corner pixel of the block, then the neighbour block will also be destroyed
                         if (ball.middle_pos_x == blocks[i].pos_x - 7 && blocks[i].col > 0) { // Upper left corner
                             blocks[i - 1].destroyed = 1;
                         } else if (ball.middle_pos_x == blocks[i].pos_x + 7 && blocks[i].col < n_cols - 1) { // Upper right corner
                             blocks[i + 1].destroyed = 1;
                         }
                     // Checking if the top middle y has hit the bottom of the block (ball top hits block bottom)
-                    } else if (ball.middle_pos_y - 3 <= blocks[i].pos_y + 8 && ball.middle_pos_y + 3 > blocks[i].pos_y - 8) {
-                        if (ball.degrees == 135){
-                            ball.degrees = 45;
-                        } else if (ball.degrees == 225) {
-                            ball.degrees = 315;
+                    } else if (ball.middle_pos_y - 3 <= blocks[i].pos_y + 8 && ball.middle_pos_y + 3 > blocks[i].pos_y - 7) {
+                        if (ball.degrees == 45){
+                            ball.degrees = 135;
+                        } else if (ball.degrees == 315) {
+                            ball.degrees = 225;
                         }
                         blocks[i].destroyed = 1;
 
@@ -336,7 +337,7 @@ void update_game_state()
                 // Else, checking if the middle y coordinate is within the block y coordinates
                 } else if (ball.middle_pos_y >= blocks[i].pos_y - 7 && ball.middle_pos_y <= blocks[i].pos_y + 7) {
                     // Checking if the right middle x has hit the left of the block (ball right hits block left)
-                    if (ball.middle_pos_x + 3 >= blocks[i].pos_x - 8 && ball.middle_pos_x + 3 < blocks[i].pos_x + 8) {
+                    if (ball.middle_pos_x + 3 >= blocks[i].pos_x - 8 && ball.middle_pos_x - 3 < blocks[i].pos_x + 7) {
                         if (ball.degrees == 45){
                             ball.degrees = 315;
                         } else if (ball.degrees == 90) {
@@ -354,7 +355,7 @@ void update_game_state()
                         }
 
                     // Checking if the left middle x has hit the right of the block (ball left hits block right)
-                    } else if (ball.middle_pos_x - 3 <= blocks[i].pos_x + 8 && ball.middle_pos_x + 3 > blocks[i].pos_x - 8) {
+                    } else if (ball.middle_pos_x - 3 <= blocks[i].pos_x + 8 && ball.middle_pos_x + 3 > blocks[i].pos_x - 7) {
                         if (ball.degrees == 315){
                             ball.degrees = 45;
                         } else if (ball.degrees == 225) {
@@ -490,7 +491,7 @@ void initialize_blocks() {
         for (int col = 0; col < n_cols; col++) {
             blocks[blockIndex].destroyed = 0; // All blocks start with not being destroyed
             blocks[blockIndex].deleted = 0; // All blocks start with not being deleted
-            blocks[blockIndex].pos_x = 320 - col * 15 + 7; // Setting the x coordinate of middle pixel based on column number. Making sure to fill from the right to the left by subtracting from the width 320
+            blocks[blockIndex].pos_x = 320 - col * 15 - 7; // Setting the x coordinate of middle pixel based on column number. Making sure to fill from the right to the left by subtracting from the width 320
             blocks[blockIndex].pos_y = row * 15 + 7; // Setting the y coordinate of middle pixel based on row number
             blocks[blockIndex].row = row; // Setting the row of the block
             blocks[blockIndex].col = col; // Setting the column of the block
@@ -518,7 +519,7 @@ void initialize_blocks() {
             blocks[blockIndex].color = chosen_color;
 
             // Drawing the actual block in the VGA
-            DrawBlock(320 - col * 15, row * 15, 15 - 1, 15 - 1, chosen_color);
+            DrawBlock(320 - (col + 1) * 15, row * 15, 15 - 1, 15 - 1, chosen_color);
 
             // Incrementing the indexes to use on the next block
             blockIndex++;
@@ -548,7 +549,7 @@ void play()
         wait();
         draw_playing_field();
         draw_ball();
-        DrawBar(bar.middle_pos_y - 23); // Finner y-koordinaten til øverste piksel i baren
+        DrawBar(bar.middle_pos_y - 23); // Finding the y coordinate of the top pixels of the bar
     }
     if (currentState == Won)
     {
@@ -567,6 +568,14 @@ void play()
 
 void reset()
 {
+    // resetting the coordinates of the bar and ball
+    bar.middle_pos_y = 112;
+    ball.middle_pos_x = 11;
+    ball.middle_pos_y = 120;
+    ball.degrees = 90;
+    ball.middle_pos_x_old = 11;
+    ball.middle_pos_y_old = 120;
+
     // Hint: This is draining the UART buffer
     int remaining = 0;
     do
@@ -581,15 +590,8 @@ void reset()
     } while (remaining > 0);
 
     // TODO: You might want to reset other state in here
-    // resetter koordinatene
-    ball.middle_pos_x = 11;
-    ball.middle_pos_y = 120;
-    ball.degrees = 90;
-    ball.middle_pos_x_old = 11;
-    ball.middle_pos_y_old = 120;
-    bar.middle_pos_y = 120;
     
-    // Legger til alle blokkene igjen
+    // Adding all the destroyed blocks back
     for (int i = 0; i < 16 * n_cols; i++) {
         blocks[i].destroyed = 0;
         blocks[i].deleted = 0;
@@ -603,7 +605,7 @@ void wait_for_start()
     unsigned char char_received = 0;
 
     // Writing initial message to player
-    write("Press w or s to start\n");
+    write("Press w or s to start \n");
 
     // Checking the UART buffer until the user presses w or s
     while (pressed_key != 1) {
@@ -630,9 +632,10 @@ void wait_for_start()
 int main(int argc, char *argv[])
 {
     ClearScreen();
+
+    // Checking if the number of columns are legal. If not, we print message to the UART window and return
     if (n_cols < 1 || n_cols > 18) {
-        char *illegal_n_cols = "This is not a playable configuration. n_cols must be in range [1, 18].";
-        write(illegal_n_cols);
+        write("n_cols out of legal range [1, 18] \n");
         return 0;
     }
 
