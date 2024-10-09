@@ -75,7 +75,8 @@ typedef enum _gameState
 GameState currentState = Stopped;
 Ball ball = {11, 120, 90, 11, 120};
 Bar bar = {4, 112};
-Block blocks[288]; // lager en liste med plass til maks antall blokker vi aksepterer, nemlig 18 * 240/15 = 288
+// Creating a list with space for the max number of blocks we accept, which is 18 * 240/15 = 288
+Block blocks[288];
 
 /***
  * Here follow the C declarations for our assembly functions
@@ -95,21 +96,21 @@ void WriteUart(char c);
  */
 
 // TODO: Add ClearScreen implementation in assembly here
-// DONE. CAN MAYBE ALSO REMOVE PUSHING/POPPING OF R4 AD R5 SINCE NOT USED
+// DONE
 asm("ClearScreen: \n\t"
-    "    PUSH {LR} \n\t"
-    "    PUSH {R4, R5} \n\t"
-    "    MOV R0, #0\n\t" // Moving the start x-coordinate into R0
-    "    MOV R1, #0\n\t" // Moving the start y-coordinate into R1
-    "    MOV R2, #320\n\t" // Moving the VGA width into R2
-    "    MOV R3, #240\n\t" // Moving the VGA height into R3
-    "    LDR R4, =0x0000ffff\n\t" // Loading the color white into R4
-    "    PUSH {R4} \n\t" // Need to pass 5th parameter (color) through stack, so pushing to stack
-    "    BL DrawBlock\n\t" // Calling the DrawBlock assembly function by branching and linking
-    "    POP {R4} \n\t" // popping the R4 value from the stack again after it has been used
-    "    POP {R4,R5}\n\t"
-    "    POP {LR} \n\t"
-    "    BX LR");
+    "PUSH {LR} \n\t" // Pushing the link register to stack to be able to return from caller
+    "PUSH {R4} \n\t" // Pushing old R4 register value to stack since it will get overwritten
+    "MOV R0, #0 \n\t" // Moving the start x-coordinate into R0
+    "MOV R1, #0 \n\t" // Moving the start y-coordinate into R1
+    "MOV R2, #320 \n\t" // Moving the VGA width into R2
+    "MOV R3, #240 \n\t" // Moving the VGA height into R3
+    "LDR R4, =0x0000ffff \n\t" // Loading the color white into R4
+    "PUSH {R4} \n\t" // Need to pass 5th parameter (color) through stack, so pushing to stack
+    "BL DrawBlock \n\t" // Calling the DrawBlock assembly function by branching and linking
+    "POP {R4} \n\t" // popping the R4 value from the stack again after it has been used
+    "POP {R4} \n\t" // Popping the old R4 value from stack
+    "POP {LR} \n\t" // Popping the old LR value from stack
+    "BX LR"); // Returning from function
 
 // assumes R0 = x-coord, R1 = y-coord, R2 = colorvalue
 asm("SetPixel: \n\t"
@@ -135,23 +136,23 @@ asm("DrawBlock: \n\t"
     "MOV R7, R3 \n\t" // Moving the height into R7
     "LDR R8, [SP, #32] \n\t" // Loading the color from the stack into R8
 
-    "mov R9, #0\n\t" // Initializing the R9 register as 0 used for counting current column
-    "mov R10, #0\n\t" // Initializing the R10 register as 0 used for counting current row
-    "loop:\n\t"
-    "MOV R0, R4\n\t" // Moving the x value from R4 into R0 for call to SetPixel
-    "MOV R1, R5\n\t" // Moving the y value from R5 into R1 for call to SetPixel
+    "MOV R9, #0 \n\t" // Initializing the R9 register as 0 used for counting current column
+    "MOV R10, #0 \n\t" // Initializing the R10 register as 0 used for counting current row
+    "loop: \n\t"
+    "MOV R0, R4 \n\t" // Moving the x value from R4 into R0 for call to SetPixel
+    "MOV R1, R5 \n\t" // Moving the y value from R5 into R1 for call to SetPixel
     "MOV R2, R8 \n\t" // Moving the color from R8 into R2 for call to Setpixel
-    "BL SetPixel\n\t" // Calling the SetPixel function
-    "add R4, R4, #1\n\t" // Incrementng x with 1
-    "add R9, R9, #1\n\t" // Incrementing the loop counter keeping track of where in the row we are
-    "cmp R9, R6\n\t" // Checking if the loop counter is equal to the width of the block
-    "blt loop\n\t" // If less than the width, then repeat the process with updated x
-    "sub R4, R4, R6\n\t" // Resetting the x coordinate if equal to the width
-    "mov R9, #0\n\t" // Resetting the loop counter for the x coordinate
-    "add R5, R5, #1\n\t" // incrementing y, jumping to the next row
-    "add R10, R10, #1\n\t"  // Incrementing the y counter
-    "cmp R10, R7\n\t" // Comparing the y counter to the height of the block
-    "blt loop\n\t" // If less than the width, then we keep filling pixels in this row
+    "BL SetPixel \n\t" // Calling the SetPixel function
+    "ADD R4, R4, #1 \n\t" // Incrementng x with 1
+    "ADD R9, R9, #1 \n\t" // Incrementing the loop counter keeping track of where in the row we are
+    "CMP R9, R6 \n\t" // Checking if the loop counter is equal to the width of the block
+    "BLT loop \n\t" // If less than the width, then repeat the process with updated x
+    "SUB R4, R4, R6 \n\t" // Resetting the x coordinate if equal to the width
+    "MOV R9, #0 \n\t" // Resetting the loop counter for the x coordinate
+    "ADD R5, R5, #1 \n\t" // incrementing y, jumping to the next row
+    "ADD R10, R10, #1 \n\t"  // Incrementing the y counter
+    "CMP R10, R7 \n\t" // Comparing the y counter to the height of the block
+    "BLT loop \n\t" // If less than the width, then we keep filling pixels in this row
 
     "POP {R4-R10} \n\t" // Restoring the registers from the stack
     "POP {LR} \n\t" // Restoring the return address from the stack
@@ -161,34 +162,34 @@ asm("DrawBlock: \n\t"
 // TODO: Impelement the DrawBar function in assembly. You need to accept the parameter as outlined in the c declaration above (unsigned int y)
 // DONE. CAN MAYBE ALSO MAKE THE UPPER, MIDDLE AND LOWER PARTS DIFFERENT COLORS
 asm("DrawBar: \n\t"
-    "    PUSH {LR} \n\t"
-    "    PUSH {R4, R5} \n\t"
+    "PUSH {LR} \n\t"
+    "PUSH {R4} \n\t"
     
     // Assuming that the y coordinate of the bar comes from the R0 register
-    "    MOV R1, R0\n\t" // Moving the start y coordinate from R0 to R1
-    "    MOV R0, #0\n\t" // Moving the start x coordinate into R0
-    "    MOV R2, #7\n\t" // Moving the bar width into R2
-    "    MOV R3, #45\n\t" // Moving the bar height into R3
-    "    LDR R4, =0x000000ff\n\t" // Storing the value of the color blue in R4
-    "    PUSH {R4} \n\t" // Pushing the color onto the stack
-    "    BL DrawBlock\n\t" // Calling the DrawBlock function
+    "MOV R1, R0 \n\t" // Moving the start y coordinate from R0 to R1
+    "MOV R0, #0 \n\t" // Moving the start x coordinate into R0
+    "MOV R2, #7 \n\t" // Moving the bar width into R2
+    "MOV R3, #45 \n\t" // Moving the bar height into R3
+    "LDR R4, =0x000000ff \n\t" // Storing the value of the color blue in R4
+    "PUSH {R4} \n\t" // Pushing the color onto the stack
+    "BL DrawBlock \n\t" // Calling the DrawBlock function
 
-    "    POP {R4} \n\t" // Popping the color off the stack
-    "    POP {R4,R5}\n\t"
-    "    POP {LR} \n\t"
-    "    BX LR");
+    "POP {R4} \n\t" // Popping the color off the stack
+    "POP {R4} \n\t" // Popping the old R4 value from stack
+    "POP {LR} \n\t" // Popping the old LR value from stack
+    "BX LR"); // Returning
 
 asm("ReadUart:\n\t"
     "LDR R1, =0xFF201000 \n\t"
-    "LDR R0, [R1]\n\t"
+    "LDR R0, [R1] \n\t"
     "BX LR");
 
 // TODO: Add the WriteUart assembly procedure here that respects the WriteUart C declaration on line 46
 // DONE
-asm("WriteUart:\n\t"
+asm("WriteUart: \n\t"
     // Assuming that the char being written to the UART is passed through R0
     "LDR R1, =0xFF201000 \n\t" // Loading the address of the UART into R1
-    "STR R0, [R1]\n\t" // Storing the value in R0 at the address of the UART
+    "STR R0, [R1] \n\t" // Storing the value in R0 at the address of the UART
     "BX LR");
 
 
@@ -201,13 +202,15 @@ void draw_ball()
 
 }
 
-// denne funksjonen vil fjerne blokker som har blitt truffet fra UI, og slette dem
 // Instead of drawing the whole playing field again, i use this function to remove the blocks
 // that have been deleted/hit, which is more efficient
 void draw_playing_field()
 {
+    // Iterating over each block
     for (int i = 0; i < 16 * n_cols; i++) {
+        // Checking if the block is destroyed and not deleted
         if (blocks[i].destroyed == 1 && blocks[i].deleted == 0) {
+            // If so, we remove the block from the UI and set it as deleted
             DrawBlock(blocks[i].pos_x - 8, blocks[i].pos_y - 7, 15, 15, white);
             blocks[i].deleted = 1;
         }
@@ -217,6 +220,7 @@ void draw_playing_field()
 // Function that gets called for each iteration in the play function, for the ball not to move too fast
 void wait()
 {
+    // Slowing down the process by counting to 10000
     volatile int j = 0;
     while (j < 10000) {
         j++;
@@ -304,11 +308,13 @@ void update_game_state()
                 } else if (ball.middle_pos_x >= blocks[i].pos_x - 7 && ball.middle_pos_x <= blocks[i].pos_x + 7) {
                     // Checking if the bottom middle y has hit the top of the block (ball bottom hits block top)
                     if (ball.middle_pos_y + 3 >= blocks[i].pos_y - 8 && ball.middle_pos_y + 3 < blocks[i].pos_y + 7) { 
+                        // Reflecting according to physics
                         if (ball.degrees == 135){
                             ball.degrees = 45;
                         } else if (ball.degrees == 225) {
                             ball.degrees = 315;
                         }
+                        // Deleting the block
                         blocks[i].destroyed = 1;
                         
                         // If the bottom middle hits the corner pixel of the block, then the neighbour block will also be destroyed
@@ -319,11 +325,13 @@ void update_game_state()
                         }
                     // Checking if the top middle y has hit the bottom of the block (ball top hits block bottom)
                     } else if (ball.middle_pos_y - 3 <= blocks[i].pos_y + 8 && ball.middle_pos_y + 3 > blocks[i].pos_y - 7) {
+                        // Reflecting according to physics
                         if (ball.degrees == 45){
                             ball.degrees = 135;
                         } else if (ball.degrees == 315) {
                             ball.degrees = 225;
                         }
+                        // Deleting the block
                         blocks[i].destroyed = 1;
 
                         // If the top middle hits the corner pixel if the block, then the neighbour block will also be destroyed
@@ -338,6 +346,7 @@ void update_game_state()
                 } else if (ball.middle_pos_y >= blocks[i].pos_y - 7 && ball.middle_pos_y <= blocks[i].pos_y + 7) {
                     // Checking if the right middle x has hit the left of the block (ball right hits block left)
                     if (ball.middle_pos_x + 3 >= blocks[i].pos_x - 8 && ball.middle_pos_x - 3 < blocks[i].pos_x + 7) {
+                        // Reflecting according to physics
                         if (ball.degrees == 45){
                             ball.degrees = 315;
                         } else if (ball.degrees == 90) {
@@ -345,6 +354,7 @@ void update_game_state()
                         } else if (ball.degrees == 135) {
                             ball.degrees = 225;
                         }
+                        // Deleting the block
                         blocks[i].destroyed = 1;
 
                         // If the right middle hits the corner pixel if the block, then the neighbour block will also be destroyed
@@ -356,11 +366,13 @@ void update_game_state()
 
                     // Checking if the left middle x has hit the right of the block (ball left hits block right)
                     } else if (ball.middle_pos_x - 3 <= blocks[i].pos_x + 8 && ball.middle_pos_x + 3 > blocks[i].pos_x - 7) {
+                        // Reflecting according to physics
                         if (ball.degrees == 315){
                             ball.degrees = 45;
                         } else if (ball.degrees == 225) {
                             ball.degrees = 135;
                         }
+                        // Deleting the block
                         blocks[i].destroyed = 1;
 
                         // If the left middle hits the corner pixel if the block, then the neighbour block will also be destroyed
@@ -380,6 +392,7 @@ void update_game_state()
 
     // Checking if the ball has hit the top or bottom of the VGA. If so, we change the angle
     if (ball.middle_pos_y - 4 == 0) { // Hits the top
+        // Reflecting according to physics
         if (ball.degrees == 45) {
             ball.degrees = 135;
         } else if (ball.degrees == 315) {
@@ -388,6 +401,7 @@ void update_game_state()
             ball.degrees = 180;
         }
     } else if (ball.middle_pos_y + 4 == 240) { // Hits the bottom
+        // Reflecting according to physics
         if (ball.degrees == 135) {
             ball.degrees = 45;
         } else if (ball.degrees == 225) {
@@ -400,14 +414,23 @@ void update_game_state()
     // Checking if the ball has hit the bar. If so, we make it change direction again,
     // where the updated angle depends on if we hit the top, middle or lower part of the bar
     if (ball.middle_pos_x - 3 == bar.middle_pos_x + 3) {
+        // Checking if the ball has hit the middle 15 pixels
         if (ball.middle_pos_y <= bar.middle_pos_y + 7 && ball.middle_pos_y >= bar.middle_pos_y - 7) {
             ball.degrees = 90;
+
+        // Checking if the ball has hit the lower 15 pixels
         } else if (ball.middle_pos_y <= bar.middle_pos_y + 23 && ball.middle_pos_y >= bar.middle_pos_y + 8) {
             ball.degrees = 135;
+
+        // Checking if the ball has hit the upper 15 pixels
         } else if (ball.middle_pos_y <= bar.middle_pos_y - 8 && ball.middle_pos_y >= bar.middle_pos_y - 23) {
             ball.degrees = 45;
+        
+        // Checking if only the upper part of the ball has hit the bar
         } else if (ball.middle_pos_y - 3 <= bar.middle_pos_y + 23 && ball.middle_pos_y + 3 > bar.middle_pos_y + 23) {
             ball.degrees = 135;
+
+        // Checking if only the lower part of the ball has hit the bar
         } else if (ball.middle_pos_y + 3 >= bar.middle_pos_y - 23 && ball.middle_pos_y - 3 < bar.middle_pos_y - 23) {
             ball.degrees = 45;
         }
@@ -426,19 +449,19 @@ void update_bar_state()
         unsigned long long out = ReadUart();
         if (!(out & 0x8000))
         {
-            // not valid - abort reading
+            // not valid, so aborting reading
             return;
         }
 
         // retrieving the lower byte of the out value
         unsigned char char_received = out & 0xFF;
 
-        // Checking if the value corresponds to a press on enter button. If so, setting the state to Exit
+        // Checking if the value corresponds to a press on enter button. If so, setting the state to Exit to stop the program
         if (char_received == 0x0a) {
             currentState = Exit;
 
         // Checking if the value corresponds to a press on w key.
-        } else if (char_received == 0x77) { // 'w' key
+        } else if (char_received == 0x77) {
             DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white);
             
             // Decreasing the bar y coordinate with step size if able to (15 or more pixels from top of bar to top of VGA)
@@ -449,10 +472,10 @@ void update_bar_state()
             } else {
                 bar.middle_pos_y = 23;
             }
-            DrawBar(bar.middle_pos_y - 23); // oppdaterer baren i ui
+            DrawBar(bar.middle_pos_y - 23); // Updating the bar in the UI
 
         // Checking if the value corresponds to a press on s key.
-        } else if (char_received == 0x73) { // 's' key
+        } else if (char_received == 0x73) {
             DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white); // fjerner gammel bar fra ui
 
             // Increasing the bar y coordinate with step size if able to (15 or more pixels from bottom of bar to bottom of VGA)
@@ -463,7 +486,7 @@ void update_bar_state()
             } else {
                 bar.middle_pos_y = 217;
             }
-            DrawBar(bar.middle_pos_y - 23); // oppdaterer baren i ui
+            DrawBar(bar.middle_pos_y - 23); // Updating the bar in the UI
         }
         remaining = (out & 0xFF0000) >> 4;
     } while (remaining > 0);
@@ -545,7 +568,7 @@ void play()
         {
             break;
         }
-        //ClearScreen();
+        // Added wait call to limit the speed of the ball
         wait();
         draw_playing_field();
         draw_ball();
@@ -568,7 +591,7 @@ void play()
 
 void reset()
 {
-    // resetting the coordinates of the bar and ball
+    // Resetting the coordinates of the bar and ball
     bar.middle_pos_y = 112;
     ball.middle_pos_x = 11;
     ball.middle_pos_y = 120;
@@ -620,7 +643,7 @@ void wait_for_start()
         // Getting the lower 8 bits of the data
         char_received = out & 0xFF;
 
-        // Check if the character is 'w' or 's'
+        // Checking if the bits correspond to w or s
         if (char_received == 0x77 || char_received == 0x73) {
             // If true, then breaking the loop and returning to start the game
             pressed_key = 1;
