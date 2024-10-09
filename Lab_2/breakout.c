@@ -138,7 +138,7 @@ asm("DrawBlock: \n\t"
 
     "MOV R9, #0 \n\t" // Initializing the R9 register as 0 used for counting current column
     "MOV R10, #0 \n\t" // Initializing the R10 register as 0 used for counting current row
-    "loop: \n\t"
+    "block_loop: \n\t"
     "MOV R0, R4 \n\t" // Moving the x value from R4 into R0 for call to SetPixel
     "MOV R1, R5 \n\t" // Moving the y value from R5 into R1 for call to SetPixel
     "MOV R2, R8 \n\t" // Moving the color from R8 into R2 for call to Setpixel
@@ -146,13 +146,13 @@ asm("DrawBlock: \n\t"
     "ADD R4, R4, #1 \n\t" // Incrementng x with 1
     "ADD R9, R9, #1 \n\t" // Incrementing the loop counter keeping track of where in the row we are
     "CMP R9, R6 \n\t" // Checking if the loop counter is equal to the width of the block
-    "BLT loop \n\t" // If less than the width, then repeat the process with updated x
+    "BLT block_loop \n\t" // If less than the width, then repeat the process with updated x
     "SUB R4, R4, R6 \n\t" // Resetting the x coordinate if equal to the width
     "MOV R9, #0 \n\t" // Resetting the loop counter for the x coordinate
     "ADD R5, R5, #1 \n\t" // incrementing y, jumping to the next row
     "ADD R10, R10, #1 \n\t"  // Incrementing the y counter
     "CMP R10, R7 \n\t" // Comparing the y counter to the height of the block
-    "BLT loop \n\t" // If less than the width, then we keep filling pixels in this row
+    "BLT block_loop \n\t" // If less than the width, then we keep filling pixels in this row
 
     "POP {R4-R10} \n\t" // Restoring the registers from the stack
     "POP {LR} \n\t" // Restoring the return address from the stack
@@ -163,51 +163,47 @@ asm("DrawBlock: \n\t"
 // DONE. CAN MAYBE ALSO MAKE THE UPPER, MIDDLE AND LOWER PARTS DIFFERENT COLORS
 asm("DrawBar: \n\t"
     "PUSH {LR} \n\t"
-    "PUSH {R4, R5} \n\t"
+    "PUSH {R4, R5, R6, R7} \n\t"
     
     // Assuming that the y coordinate of the bar comes from the R0 register
 
     "MOV R5, R0 \n\t" // Moving the start y coordinate from R0 to R5
 
+    // Setting up the loop for drawing the 3 parts of the bar
+    "MOV R6, #3 \n\t" // Loop counter for 3 parts
+    "MOV R7, #0 \n\t" // Part index
+
     // Drawing the top part of the bar
+    "bar_loop: \n\t"
     "MOV R1, R5 \n\t" // Moving the start y coordinate from R5 to R1
     "MOV R0, #0 \n\t" // Moving the start x coordinate into R0
     "MOV R2, #7 \n\t" // Moving the bar width into R2
-    "MOV R3, #15 \n\t" // Moving the bar height into R3
-    "LDR R4, =0x000000ff \n\t" // Storing the value of the color blue in R4
-    "PUSH {R4} \n\t" // Pushing the color onto the stack
-    "BL DrawBlock \n\t" // Calling the DrawBlock function
-    "POP {R4} \n\t" // Popping the color off the stack
+    "MOV R3, #15 \n\t" // Moving the height into R3
 
-    "ADD R5, R5, #15 \n\t" // Increasing the y coordinate to point to upper left pixel in middle part
-    
-    // Drawing the middle part of the bar
-    "MOV R1, R5 \n\t" // Moving the start y coordinate from R5 to R1
-    "MOV R0, #0 \n\t" // Moving the start x coordinate into R0
-    "MOV R2, #7 \n\t" // Moving the bar width into R2
-    "MOV R3, #15 \n\t" // Moving the bar height into R3
+    // Setting the color based on the part index
+    "CMP R7, #1 \n\t" // Comparing part index with 1
+    "BEQ middle_part \n\t" // If equal, jumping to middle_part
+    "LDR R4, =0x000000ff \n\t" // Storing the value of the color blue in R4
+    "B draw_part \n\t" // Jumping to draw_part
+
+    "middle_part: \n\t"
     "LDR R4, =0x0000f0f0 \n\t" // Storing the value of the color red in R4
+
+    "draw_part: \n\t"
     "PUSH {R4} \n\t" // Pushing the color onto the stack
     "BL DrawBlock \n\t" // Calling the DrawBlock function
     "POP {R4} \n\t" // Popping the color off the stack
 
-    "ADD R5, R5, #15 \n\t" // Increasing the y coordinate to point to upper left pixel in bottom part
+    "ADD R5, R5, #15 \n\t" // Increasing the y coordinate to point to upper left pixel in next part
+    "ADD R7, R7, #1 \n\t" // Incrementing the part index
+    "CMP R7, R6 \n\t" // Comparing the part index to the loop counter
+    "BLT bar_loop \n\t" // If less than the loop counter, repeat the loop
 
-    // Drawing the bottom part of the bar
-    "MOV R1, R5 \n\t" // Moving the start y coordinate from R5 to R1
-    "MOV R0, #0 \n\t" // Moving the start x coordinate into R0
-    "MOV R2, #7 \n\t" // Moving the bar width into R2
-    "MOV R3, #15 \n\t" // Moving the bar height into R3
-    "LDR R4, =0x000000ff \n\t" // Storing the value of the color blue in R4
-    "PUSH {R4} \n\t" // Pushing the color onto the stack
-    "BL DrawBlock \n\t" // Calling the DrawBlock function
-    "POP {R4} \n\t" // Popping the color off the stack
-
-    "POP {R4, R5} \n\t" // Popping the old R4 value from stack
+    "POP {R4, R5, R6, R7} \n\t" // Popping the old register values from stack
     "POP {LR} \n\t" // Popping the old LR value from stack
     "BX LR"); // Returning
 
-asm("ReadUart:\n\t"
+asm("ReadUart: \n\t"
     "LDR R1, =0xFF201000 \n\t"
     "LDR R0, [R1] \n\t"
     "BX LR");
@@ -271,7 +267,7 @@ void update_game_state()
     // DONE
 
     // Checking if the right ball x coordinate is 320. If so, update the state to won and return
-    if (ball.middle_pos_x + 3 >= 320)
+    if (ball.middle_pos_x + 3 >= width)
     {
         currentState = Won;
         return;
@@ -315,7 +311,7 @@ void update_game_state()
 
     // In order to not check too often, we check only when the ball is within the area where there is/has been blocks. 
     // Subtracting 3 since we use the middle x coordinate, which is 3 from the border
-    if (ball.middle_pos_x > 320 - n_cols * 15 - 3)
+    if (ball.middle_pos_x > width - n_cols * 15 - 3)
     {
         // Iterating over the blocks
         for (int i = 0; i < 16 * n_cols; i++) {
@@ -428,7 +424,7 @@ void update_game_state()
         } else if (ball.degrees == 0) {
             ball.degrees = 180;
         }
-    } else if (ball.middle_pos_y + 4 == 240) { // Hits the bottom
+    } else if (ball.middle_pos_y + 4 == height) { // Hits the bottom
         // Reflecting according to physics
         if (ball.degrees == 135) {
             ball.degrees = 45;
@@ -466,6 +462,7 @@ void update_game_state()
 
 }
 
+// Using this function to update state as well as removing old bar in VGA
 void update_bar_state()
 {
     // The step size to move when pressing w or s
@@ -481,7 +478,7 @@ void update_bar_state()
             return;
         }
 
-        // retrieving the lower byte of the out value
+        // Retrieving the lower byte of the out value
         unsigned char char_received = out & 0xFF;
 
         // Checking if the value corresponds to a press on enter button. If so, setting the state to Exit to stop the program
@@ -500,21 +497,19 @@ void update_bar_state()
             } else {
                 bar.middle_pos_y = 23;
             }
-            DrawBar(bar.middle_pos_y - 23); // Updating the bar in the UI
 
         // Checking if the value corresponds to a press on s key.
         } else if (char_received == 0x73) {
             DrawBlock(bar.middle_pos_x - 4, bar.middle_pos_y - 23, 7, 45, white); // fjerner gammel bar fra ui
 
             // Increasing the bar y coordinate with step size if able to (15 or more pixels from bottom of bar to bottom of VGA)
-            if (bar.middle_pos_y + 23 + move_step <= 240) {
+            if (bar.middle_pos_y + 23 + move_step <= height) {
                 bar.middle_pos_y += move_step;
             
             // If not enough space, we set it to the bottom of the screen, meaning that the middle coordinate becomes 217
             } else {
                 bar.middle_pos_y = 217;
             }
-            DrawBar(bar.middle_pos_y - 23); // Updating the bar in the UI
         }
         remaining = (out & 0xFF0000) >> 4;
     } while (remaining > 0);
@@ -542,7 +537,7 @@ void initialize_blocks() {
         for (int col = 0; col < n_cols; col++) {
             blocks[blockIndex].destroyed = 0; // All blocks start with not being destroyed
             blocks[blockIndex].deleted = 0; // All blocks start with not being deleted
-            blocks[blockIndex].pos_x = 320 - col * 15 - 7; // Setting the x coordinate of middle pixel based on column number. Making sure to fill from the right to the left by subtracting from the width 320
+            blocks[blockIndex].pos_x = width - col * 15 - 7; // Setting the x coordinate of middle pixel based on column number. Making sure to fill from the right to the left by subtracting from the width 320
             blocks[blockIndex].pos_y = row * 15 + 7; // Setting the y coordinate of middle pixel based on row number
             blocks[blockIndex].row = row; // Setting the row of the block
             blocks[blockIndex].col = col; // Setting the column of the block
@@ -570,7 +565,7 @@ void initialize_blocks() {
             blocks[blockIndex].color = chosen_color;
 
             // Drawing the actual block in the VGA
-            DrawBlock(320 - (col + 1) * 15, row * 15, 15 - 1, 15 - 1, chosen_color);
+            DrawBlock(width - (col + 1) * 15, row * 15, 15 - 1, 15 - 1, chosen_color);
 
             // Incrementing the indexes to use on the next block
             blockIndex++;
@@ -663,7 +658,7 @@ void wait_for_start()
         // Reading the next byte from UART buffer
         unsigned long long out = ReadUart();
 
-        // Check if the UART buffer is ready (MSB 0x8000 flag set)
+        // Checking if the UART buffer is ready (MSB 0x8000 flag set)
         if (!(out & 0x8000)) {
             continue; // If not ready, continue waiting
         }
@@ -682,6 +677,7 @@ void wait_for_start()
 
 int main(int argc, char *argv[])
 {
+    // Clearing the screen in the beginning of the game
     ClearScreen();
 
     // Checking if the number of columns are legal. If not, we print message to the UART window and return
