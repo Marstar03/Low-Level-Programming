@@ -163,19 +163,47 @@ asm("DrawBlock: \n\t"
 // DONE. CAN MAYBE ALSO MAKE THE UPPER, MIDDLE AND LOWER PARTS DIFFERENT COLORS
 asm("DrawBar: \n\t"
     "PUSH {LR} \n\t"
-    "PUSH {R4} \n\t"
+    "PUSH {R4, R5} \n\t"
     
     // Assuming that the y coordinate of the bar comes from the R0 register
-    "MOV R1, R0 \n\t" // Moving the start y coordinate from R0 to R1
+
+    "MOV R5, R0 \n\t" // Moving the start y coordinate from R0 to R5
+
+    // Drawing the top part of the bar
+    "MOV R1, R5 \n\t" // Moving the start y coordinate from R5 to R1
     "MOV R0, #0 \n\t" // Moving the start x coordinate into R0
     "MOV R2, #7 \n\t" // Moving the bar width into R2
-    "MOV R3, #45 \n\t" // Moving the bar height into R3
+    "MOV R3, #15 \n\t" // Moving the bar height into R3
     "LDR R4, =0x000000ff \n\t" // Storing the value of the color blue in R4
     "PUSH {R4} \n\t" // Pushing the color onto the stack
     "BL DrawBlock \n\t" // Calling the DrawBlock function
-
     "POP {R4} \n\t" // Popping the color off the stack
-    "POP {R4} \n\t" // Popping the old R4 value from stack
+
+    "ADD R5, R5, #15 \n\t" // Increasing the y coordinate to point to upper left pixel in middle part
+    
+    // Drawing the middle part of the bar
+    "MOV R1, R5 \n\t" // Moving the start y coordinate from R5 to R1
+    "MOV R0, #0 \n\t" // Moving the start x coordinate into R0
+    "MOV R2, #7 \n\t" // Moving the bar width into R2
+    "MOV R3, #15 \n\t" // Moving the bar height into R3
+    "LDR R4, =0x0000f0f0 \n\t" // Storing the value of the color red in R4
+    "PUSH {R4} \n\t" // Pushing the color onto the stack
+    "BL DrawBlock \n\t" // Calling the DrawBlock function
+    "POP {R4} \n\t" // Popping the color off the stack
+
+    "ADD R5, R5, #15 \n\t" // Increasing the y coordinate to point to upper left pixel in bottom part
+
+    // Drawing the bottom part of the bar
+    "MOV R1, R5 \n\t" // Moving the start y coordinate from R5 to R1
+    "MOV R0, #0 \n\t" // Moving the start x coordinate into R0
+    "MOV R2, #7 \n\t" // Moving the bar width into R2
+    "MOV R3, #15 \n\t" // Moving the bar height into R3
+    "LDR R4, =0x000000ff \n\t" // Storing the value of the color blue in R4
+    "PUSH {R4} \n\t" // Pushing the color onto the stack
+    "BL DrawBlock \n\t" // Calling the DrawBlock function
+    "POP {R4} \n\t" // Popping the color off the stack
+
+    "POP {R4, R5} \n\t" // Popping the old R4 value from stack
     "POP {LR} \n\t" // Popping the old LR value from stack
     "BX LR"); // Returning
 
@@ -286,8 +314,8 @@ void update_game_state()
     // HINT: try to only do this check when we potentially have a hit, as it is relatively expensive and can slow down game play a lot
 
     // In order to not check too often, we check only when the ball is within the area where there is/has been blocks. 
-    // Subtracting 5 since we use the middle x coordinate, which is 3 from the border
-    if (ball.middle_pos_x > 320 - n_cols * 15 - 5)
+    // Subtracting 3 since we use the middle x coordinate, which is 3 from the border
+    if (ball.middle_pos_x > 320 - n_cols * 15 - 3)
     {
         // Iterating over the blocks
         for (int i = 0; i < 16 * n_cols; i++) {
