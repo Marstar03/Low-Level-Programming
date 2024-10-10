@@ -134,7 +134,7 @@ asm("DrawBlock: \n\t"
     "MOV R5, R1 \n\t" // Moving y into R5
     "MOV R6, R2 \n\t" // Moving the width into R6
     "MOV R7, R3 \n\t" // Moving the height into R7
-    "LDR R8, [SP, #32] \n\t" // Loading the color from the stack into R8
+    "LDR R8, [SP, #32] \n\t" // Loading the color from the stack into R8. Using SP + 32 since LR and R4-R10 (4 bytes each) are stored on stack, so need to access stack with (1 + 7)*4 = 32 bytes offset
 
     "MOV R9, #0 \n\t" // Initializing the R9 register as 0 used for counting current column
     "MOV R10, #0 \n\t" // Initializing the R10 register as 0 used for counting current row
@@ -342,10 +342,10 @@ void update_game_state()
                         blocks[i].destroyed = 1;
                         
                         // If the bottom middle hits the corner pixel of the block, then the neighbour block will also be destroyed
-                        if (ball.middle_pos_x == blocks[i].pos_x - 7 && blocks[i].col > 0) { // Upper left corner
-                            blocks[i - 1].destroyed = 1;
-                        } else if (ball.middle_pos_x == blocks[i].pos_x + 7 && blocks[i].col < n_cols - 1) { // Upper right corner
-                            blocks[i + 1].destroyed = 1;
+                        if (ball.middle_pos_x == blocks[i].pos_x - 7 && blocks[i].col < n_cols - 1) { // Upper left corner
+                            blocks[i + 1].destroyed = 1; // Block to the left gets destroyed
+                        } else if (ball.middle_pos_x == blocks[i].pos_x + 7 && blocks[i].col > 0) { // Upper right corner
+                            blocks[i - 1].destroyed = 1; // Block to the right gets destroyed
                         }
                     // Checking if the top middle y has hit the bottom of the block (ball top hits block bottom)
                     } else if (ball.middle_pos_y - 3 <= blocks[i].pos_y + 8 && ball.middle_pos_y + 3 > blocks[i].pos_y - 7) {
@@ -359,10 +359,10 @@ void update_game_state()
                         blocks[i].destroyed = 1;
 
                         // If the top middle hits the corner pixel if the block, then the neighbour block will also be destroyed
-                        if (ball.middle_pos_x == blocks[i].pos_x - 7 && blocks[i].col > 0) { // Lower left corner
-                            blocks[i - 1].destroyed = 1;
-                        } else if (ball.middle_pos_x == blocks[i].pos_x + 7 && blocks[i].col < n_cols - 1) { // Lower right corner
-                            blocks[i + 1].destroyed = 1;
+                        if (ball.middle_pos_x == blocks[i].pos_x - 7 && blocks[i].col < n_cols - 1) { // Lower left corner
+                            blocks[i + 1].destroyed = 1; // Block to the left gets destroyed
+                        } else if (ball.middle_pos_x == blocks[i].pos_x + 7 && blocks[i].col > 0) { // Lower right corner
+                            blocks[i - 1].destroyed = 1; // Block to the right gets destroyed
                         }
                     }
 
@@ -383,9 +383,9 @@ void update_game_state()
 
                         // If the right middle hits the corner pixel if the block, then the neighbour block will also be destroyed
                         if (ball.middle_pos_y == blocks[i].pos_y - 7 && blocks[i].row > 0) { // Upper left corner
-                            blocks[i - n_cols].destroyed = 1;
+                            blocks[i - n_cols].destroyed = 1; // Block above gets destroyed
                         } else if (ball.middle_pos_y == blocks[i].pos_y + 7 && blocks[i].row < 16 - 1) { // Lower left corner
-                            blocks[i + n_cols].destroyed = 1;
+                            blocks[i + n_cols].destroyed = 1; // Block below gets destroyed
                         }
 
                     // Checking if the left middle x has hit the right of the block (ball left hits block right)
@@ -401,9 +401,9 @@ void update_game_state()
 
                         // If the left middle hits the corner pixel if the block, then the neighbour block will also be destroyed
                         if (ball.middle_pos_y == blocks[i].pos_y - 7 && blocks[i].row > 0) { // Upper right corner
-                            blocks[i - n_cols].destroyed = 1;
+                            blocks[i - n_cols].destroyed = 1; // Block above gets destroyed
                         } else if (ball.middle_pos_y == blocks[i].pos_y + 7 && blocks[i].row < 16 - 1) { // Lower right corner
-                            blocks[i + n_cols].destroyed = 1;
+                            blocks[i + n_cols].destroyed = 1; // Block below gets destroyed
                         }
 
                     }
