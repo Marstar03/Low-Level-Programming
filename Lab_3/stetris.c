@@ -3,17 +3,24 @@
 #include <unistd.h>
 #include <termios.h>
 #include <sys/select.h>
+#include <sys/mman.h>
+#include <sys/ioctl.h>
+#include <linux/fb.h>
 #include <linux/input.h>
 #include <stdbool.h>
 #include <string.h>
 #include <time.h>
 #include <poll.h>
+#include <stdint.h>
+#include <fcntl.h>
 
 // The game state can be used to detect what happens on the playfield
 #define GAMEOVER 0
 #define ACTIVE (1 << 0)
 #define ROW_CLEAR (1 << 1)
 #define TILE_ADDED (1 << 2)
+
+#define SENSE_HAT_FB_PATH "/dev/fb0"
 
 // If you extend this structure, either avoid pointers or adjust
 // the game logic allocate/deallocate and reset the memory
@@ -58,12 +65,63 @@ gameConfig game = {
     .initNextGameTick = 50,
 };
 
+
+// Helper function to convert RGB888 to RGB565
+uint16_t rgb888_to_rgb565(uint8_t red, uint8_t green, uint8_t blue) {
+    uint16_t r = (red >> 3) & 0x1F;
+    uint16_t g = (green >> 2) & 0x3F;
+    uint16_t b = (blue >> 3) & 0x1F;
+    return (r << 11) | (g << 5) | b;
+}
+
 // This function is called on the start of your application
 // Here you can initialize what ever you need for your task
 // return false if something fails, else true
-bool initializeSenseHat()
-{
+// Initialize Sense HAT and set all LEDs to one color
+bool initializeSenseHat(uint16_t **fb_mem) {
+    // Open the framebuffer device
+    int fb_fd = open(SENSE_HAT_FB_PATH, O_RDWR);
+    if (fb_fd == -1) {
+        perror("Error opening framebuffer device");
+        return false;
+    }
+
+    // Get fixed screen info (useful for mmap)
+    struct fb_fix_screeninfo finfo;
+    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+        perror("Error reading fixed information");
+        close(fb_fd);
+        return false;
+    }
+
+    // Memory-map the framebuffer
+    *fb_mem = (uint16_t *)mmap(NULL, finfo.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
+    if (*fb_mem == MAP_FAILED) {
+        perror("Error memory-mapping the framebuffer");
+        close(fb_fd);
+        return false;
+    }
+
+    // Close the framebuffer file descriptor (mmap keeps the memory mapped)
+    close(fb_fd);
+
     return true;
+}
+
+
+// Set the color of the entire 8x8 LED matrix via memory-mapped framebuffer
+void setMatrixColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue) {
+    uint16_t color = rgb888_to_rgb565(red, green, blue);
+    
+    // Set each pixel to the given color
+    for (int i = 0; i < 8 * 8; i++) {
+        fb_mem[i] = color;
+    }
+}
+
+// Unmap the framebuffer when done
+void cleanupSenseHat(uint16_t *fb_mem, struct fb_fix_screeninfo finfo) {
+    munmap(fb_mem, finfo.smem_len);
 }
 
 // This function is called when the application exits
@@ -445,10 +503,22 @@ int main(int argc, char **argv)
     // Start with gameOver
     gameOver();
 
-    if (!initializeSenseHat())
+    uint16_t *fb_mem;
+
+    if (!initializeSenseHat(&fb_mem))
     {
         fprintf(stderr, "ERROR: could not initilize sense hat\n");
         return 1;
+    } else {
+        // Set the entire matrix to red
+        setMatrixColor(fb_mem, 255, 0, 0);
+
+        // Sleep for 5 seconds to view the LED matrix
+        sleep(5);
+
+        // Cleanup
+        struct fb_fix_screeninfo finfo;  // Use the same screen info from the earlier mmap
+        cleanupSenseHat(fb_mem, finfo);
     };
 
     // Clear console, render first time
@@ -468,7 +538,7 @@ int main(int argc, char **argv)
             // reading the inputs from stdin. However, we expect you to read the inputs directly
             // from the input device and not from stdin (you should implement the readSenseHatJoystick
             // method).
-            // key = readKeyboard();
+            key = readKeyboard();
         }
         if (key == KEY_ENTER)
             break;
