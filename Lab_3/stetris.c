@@ -278,6 +278,7 @@ void closeJoystick() {
 // !!! when nothing was pressed you MUST return 0 !!!
 int readSenseHatJoystick() {
     if (joystick_fd == -1) {
+        printf("No joystick");
         return 0;  // No joystick
     }
 
@@ -294,15 +295,15 @@ int readSenseHatJoystick() {
         while (read(joystick_fd, &ev, sizeof(ev)) > 0) {
             if (ev.type == EV_KEY && ev.value == 1) {  // EV_KEY with value 1 means key press
                 switch (ev.code) {
-                    case 10:
+                    case KEY_ENTER:
                         return KEY_ENTER;
-                    case 65:
+                    case KEY_UP:
                         return KEY_UP;
-                    case 66:
+                    case KEY_DOWN:
                         return KEY_DOWN;
-                    case 67:
+                    case KEY_RIGHT:
                         return KEY_RIGHT;
-                    case 68:
+                    case KEY_LEFT:
                         return KEY_LEFT;
                 }
             }
@@ -720,6 +721,15 @@ int main(int argc, char **argv)
             // from the input device and not from stdin (you should implement the readSenseHatJoystick
             // method).
             key = readKeyboard();
+        }
+        if (key == KEY_RIGHT) {
+            setMatrixColor(fb_mem, 255, 0, 0);
+        }
+        if (key == KEY_LEFT) {
+            setMatrixColor(fb_mem, 0, 255, 0);
+        }
+        if (key == KEY_UP) {
+            setMatrixColor(fb_mem, 0, 0, 255);
         }
         if (key == KEY_ENTER)
             break;
