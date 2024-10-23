@@ -28,6 +28,12 @@
 #define JOYSTICK_NAME "Raspberry Pi Sense HAT Joystick"
 #define INPUT_DIR "/dev/input/"
 
+#define COLOR_RED {255, 0, 0}
+#define COLOR_GREEN {0, 255, 0}
+#define COLOR_BLUE {0, 0, 255}
+#define COLOR_YELLOW {255, 255, 0}
+#define COLOR_PURPLE {128, 0, 128}
+
 
 // Global joystick file descriptor
 int joystick_fd = -1;
@@ -37,6 +43,9 @@ int joystick_fd = -1;
 typedef struct
 {
     bool occupied;
+    uint8_t red;
+    uint8_t green;
+    uint8_t blue;
 } tile;
 
 typedef struct
@@ -74,6 +83,8 @@ gameConfig game = {
     .rowsPerLevel = 2,
     .initNextGameTick = 50,
 };
+
+static inline bool tileOccupied(coord const target);
 
 
 // Helper function to convert RGB888 to RGB565
@@ -189,6 +200,13 @@ void setMatrixColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue) 
     }
 }
 
+void setTileColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue, unsigned int x, unsigned int y) {
+    uint16_t color = rgb888_to_rgb565(red, green, blue);
+    
+    int fb_mem_index = y * 8 + x;
+    fb_mem[fb_mem_index] = color;
+}
+
 // Unmap the framebuffer when done
 void cleanupSenseHat(uint16_t *fb_mem, size_t fb_size) {
     if (munmap(fb_mem, fb_size) == -1) {
@@ -290,7 +308,7 @@ int readSenseHatJoystick() {
     int lkey = 0;
 
     // Poll for input without blocking
-    if (poll(&pollJoystick, 1, 0) > 0) {
+    if (poll(&pollJoystick, 1, 0)) {
         struct input_event ev;
         while (read(joystick_fd, &ev, sizeof(ev)) > 0) {
             if (ev.type == EV_KEY && ev.value == 1) {  // EV_KEY with value 1 means key press
@@ -316,9 +334,30 @@ int readSenseHatJoystick() {
 // This function should render the gamefield on the LED matrix. It is called
 // every game tick. The parameter playfieldChanged signals whether the game logic
 // has changed the playfield
-void renderSenseHatMatrix(bool const playfieldChanged)
+void renderSenseHatMatrix(uint16_t *fb_mem, bool const playfieldChanged)
 {
-    (void)playfieldChanged;
+    //(void)playfieldChanged;
+
+    if (!playfieldChanged) {
+        return;
+    }
+
+    for (unsigned int y = 0; y < game.grid.y; y++)
+    {
+        for (unsigned int x = 0; x < game.grid.x; x++)
+        {
+            coord const checkTile = {x, y};
+            if (tileOccupied(checkTile)) {
+                uint8_t red = game.playfield[y][x].red;
+                uint8_t green = game.playfield[y][x].green;
+                uint8_t blue = game.playfield[y][x].blue;
+                setTileColor(fb_mem, red, green, blue, x, y);
+            } else {
+                setTileColor(fb_mem, 0, 0, 0, x, y);
+            }
+
+        }
+    }
 }
 
 // The game logic uses only the following functions to interact with the playfield.
@@ -328,6 +367,21 @@ void renderSenseHatMatrix(bool const playfieldChanged)
 static inline void newTile(coord const target)
 {
     game.playfield[target.y][target.x].occupied = true;
+
+    uint8_t colors[][3] = {
+        COLOR_RED,
+        COLOR_GREEN,
+        COLOR_BLUE,
+        COLOR_YELLOW,
+        COLOR_PURPLE
+    };
+
+    // Select a random color index
+    int colorIndex = rand() % 5;
+
+    game.playfield[target.y][target.x].red = colors[colorIndex][0];
+    game.playfield[target.y][target.x].green = colors[colorIndex][1];
+    game.playfield[target.y][target.x].blue = colors[colorIndex][2];
 }
 
 static inline void copyTile(coord const to, coord const from)
@@ -686,17 +740,6 @@ int main(int argc, char **argv)
         fprintf(stderr, "ERROR: could not initilize sense hat\n");
         return 1;
     } 
-    // else {
-    //     // Set the entire matrix to red
-    //     setMatrixColor(fb_mem, 255, 0, 0);
-
-    //     // Sleep for 5 seconds to view the LED matrix
-    //     sleep(5);
-
-    //     // Cleanup
-    //     //struct fb_fix_screeninfo finfo;  // Use the same screen info from the earlier mmap
-    //     cleanupSenseHat(fb_mem, fb_size);
-    // };
     if (initializeJoystick() != 0)
     {
         fprintf(stderr, "ERROR: could not initialize joystick\n");
@@ -706,7 +749,8 @@ int main(int argc, char **argv)
     // Clear console, render first time
     fprintf(stdout, "\033[H\033[J");
     renderConsole(true);
-    renderSenseHatMatrix(true);
+    renderSenseHatMatrix(fb_mem, true);
+    setMatrixColor(fb_mem, 0, 0, 0);
 
     while (true)
     {
@@ -722,21 +766,12 @@ int main(int argc, char **argv)
             // method).
             key = readKeyboard();
         }
-        if (key == KEY_RIGHT) {
-            setMatrixColor(fb_mem, 255, 0, 0);
-        }
-        if (key == KEY_LEFT) {
-            setMatrixColor(fb_mem, 0, 255, 0);
-        }
-        if (key == KEY_UP) {
-            setMatrixColor(fb_mem, 0, 0, 255);
-        }
         if (key == KEY_ENTER)
             break;
 
         bool playfieldChanged = sTetris(key);
         renderConsole(playfieldChanged);
-        renderSenseHatMatrix(playfieldChanged);
+        renderSenseHatMatrix(fb_mem, playfieldChanged);
 
         // Wait for next tick
         gettimeofday(&eTv, NULL);
