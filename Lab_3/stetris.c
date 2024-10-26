@@ -96,43 +96,37 @@ uint16_t rgb888_to_rgb565(uint8_t red, uint8_t green, uint8_t blue) {
 }
 
 bool find_sensehat_fb(char *fb_path, size_t path_len) {
-    struct fb_fix_screeninfo finfo;
-    char device_path[MAX_FB_PATH];
-    int fb_fd;
+    struct fb_fix_screeninfo finfo; // struct for holding the sense hat screen information fetched using the frame buffer device api
+    char device_path[MAX_FB_PATH]; // will hold the path to the frame buffer we are checking
+    int fb_fd; // file descriptor for the frame buffer
     
-    // Iterate through /dev/fb0 to /dev/fb31
+    // iterating over all possible frame buffers, which is at most 32. Want to find the one for the sense hat by checking the name
     for (int i = 0; i < 32; i++) {
-        snprintf(device_path, sizeof(device_path), FRAMEBUFFER_DIR "fb%d", i);
+        snprintf(device_path, sizeof(device_path), FRAMEBUFFER_DIR "fb%d", i); // creating the file path to the frame buffer we want to check
         
-        // Attempt to open the framebuffer device
-        fb_fd = open(device_path, O_RDWR);
-        if (fb_fd == -1) {
-            // Unable to open, possibly doesn't exist, skip to next
+        fb_fd = open(device_path, O_RDWR); // trying to open the frame buffer
+        if (fb_fd == -1) { // if the file descriptor is -1, it means we were not able to open, so we skip to the next frame buffer
             continue;
         }
         
-        // Retrieve fixed screen information
-        if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+        if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) { // trying to fetch the screen information using ioctl and copying that to the address of the finfo struct
+            // if it returns -1, it failed so we close the file descriptor and try the next frame buffer
             perror("ioctl FBIOGET_FSCREENINFO failed");
             close(fb_fd);
             continue;
         }
         
-        // Compare the framebuffer name
-        if (strncmp(finfo.id, TARGET_FB_NAME, strlen(TARGET_FB_NAME)) == 0) {
-            // Found the correct framebuffer
-            strncpy(fb_path, device_path, path_len - 1);
-            fb_path[path_len - 1] = '\0';  // Ensure null-termination
-            close(fb_fd);
+        if (strncmp(finfo.id, TARGET_FB_NAME, strlen(TARGET_FB_NAME)) == 0) { // comparing the id field (name) of the screen info struct with the wanted name
+            strncpy(fb_path, device_path, path_len - 1); // copying the device path to the frame buffer path
+            fb_path[path_len - 1] = '\0';  // adding null termination
+            close(fb_fd); // closing the file descriptor
             return true;
         }
         
-        // Not the target framebuffer, close and continue
-        close(fb_fd);
+        close(fb_fd); // if the id was not the correct one, we close the file descriptor and keep iterating over the frame buffers
     }
     
-    // Framebuffer not found
-    return false;
+    return false; // returning false if we didnt find any matching frame buffers
 }
 
 
@@ -144,26 +138,26 @@ bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path) {
     struct fb_fix_screeninfo finfo;
     int fb_fd;
     
-    // Find the correct framebuffer device
-    if (!find_sensehat_fb(fb_path, MAX_FB_PATH)) {
+    if (!find_sensehat_fb(fb_path, MAX_FB_PATH)) { // first checking if we find the path to the frame buffer of the sense hat
         fprintf(stderr, "RPi-Sense FB not found!\n");
-        return false;
+        return false; // returning false if we didnt find it
     }
     
-    // Open the framebuffer device
-    fb_fd = open(fb_path, O_RDWR);
+    fb_fd = open(fb_path, O_RDWR); // trying to open the frame buffer device
     if (fb_fd == -1) {
         perror("Error opening framebuffer device");
-        return false;
+        return false; // returning false if we couldnt open it
     }
     
-    // Retrieve fixed screen information
-    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) {
+    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) { // again trying to fetch the screen information using ioctl and copying that to the address of the finfo struct
+        // if it returns -1, it failed so we close the file descriptor and return false
         perror("ioctl FBIOGET_FSCREENINFO failed");
         close(fb_fd);
         return false;
     }
     
+    // kan muligens fjerne denne delen siden vi kan anta antall piksler etc
+    // -----------
     // Retrieve variable screen information (needed for memory mapping)
     struct fb_var_screeninfo vinfo;
     if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo) == -1) {
@@ -171,40 +165,43 @@ bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path) {
         close(fb_fd);
         return false;
     }
+    // --------------
     
-    // Calculate the size of the framebuffer
-    *fb_size = finfo.smem_len;
+    *fb_size = finfo.smem_len; // finding the size of the framebuffer
     
-    // Memory-map the framebuffer
+    // memory mapping the sense hat frame buffer and setting the fb_mem pointer to point to the start of the frame buffer memory
+    // setting first argument to null to let os choose location in memory
+    // setting second argument to the size of the framebuffer in memory, and says how much memory to map
+    // using the third argument to give read and write permission to the mapped memory, so that we can update the sense hat
     *fb_mem = (uint16_t *)mmap(NULL, finfo.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
-    if (*fb_mem == MAP_FAILED) {
+    if (*fb_mem == MAP_FAILED) { // checking if the mapping to the pointer failed by comparing with MAP_FAILED return value
+        // if it failed we need to close the file descriptor and return false
         perror("Error memory-mapping the framebuffer");
         close(fb_fd);
         return false;
     }
-    
-    // Close the framebuffer file descriptor; the memory remains mapped
-    close(fb_fd);
+
+    close(fb_fd); // closing the framebuffer file descriptor
     
     return true;
 }
 
-
-// Set the color of the entire 8x8 LED matrix via memory-mapped framebuffer
+// function that takes in rgb values in 8 bit format and sets the whole led matrix to that color
 void setMatrixColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue) {
-    uint16_t color = rgb888_to_rgb565(red, green, blue);
+    uint16_t color = rgb888_to_rgb565(red, green, blue); // calling the function to convert the 8 bit rgb values to a single 16 bit color int on the 565 rgb format
     
-    // Set each pixel to the given color
+    // setting each of the 64 led lights to the retrieved color value
     for (int i = 0; i < 8 * 8; i++) {
-        fb_mem[i] = color;
+        fb_mem[i] = color; // using the pointer we got from the mmap and indexing into each led position to set the color
     }
 }
 
+// function that takes in rgb values in 8 bit format and sets a led light at specific xy coordinates in the matrix to that color 
 void setTileColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue, unsigned int x, unsigned int y) {
-    uint16_t color = rgb888_to_rgb565(red, green, blue);
+    uint16_t color = rgb888_to_rgb565(red, green, blue); // calling the function to convert the 8 bit rgb values to a single 16 bit color int on the 565 rgb format
     
-    int fb_mem_index = y * 8 + x;
-    fb_mem[fb_mem_index] = color;
+    int fb_mem_index = y * 8 + x; // finding the index into the frame buffer based on the coordinates
+    fb_mem[fb_mem_index] = color; // setting the value at that index to the color we found
 }
 
 // Unmap the framebuffer when done
@@ -220,70 +217,70 @@ void freeSenseHat()
 {
 }
 
+// function for finding the joystick device
 int find_joystick_device(char *joystick_path, size_t path_len) {
     struct dirent *entry;
     DIR *dp = opendir(INPUT_DIR);
 
-    if (dp == NULL) {
+    if (dp == NULL) { // throwing error if not able to open the directory for the input devices, which happens opendir returns null
         perror("Error opening input directory");
         return -1;
     }
 
-    // Iterate over each entry in the input directory
+    // iterating over each of the entries in the input directory. Using while loop compared to for loop when finding the sense hat since we dont know how many entries there are
     while ((entry = readdir(dp)) != NULL) {
-        if (strncmp(entry->d_name, "event", 5) == 0) {  // Look for event devices
+        if (strncmp(entry->d_name, "event", 5) == 0) { // checking if the entry is an event device
             char device_path[256];
-            snprintf(device_path, sizeof(device_path), INPUT_DIR "%s", entry->d_name);
+            snprintf(device_path, sizeof(device_path), INPUT_DIR "%s", entry->d_name); // creating the path to the specific event device
 
-            // Open the input device
-            int fd = open(device_path, O_RDONLY);
-            if (fd < 0) {
+            int fd = open(device_path, O_RDONLY); // opening the input device
+            if (fd < 0) { // checking if the file descriptor is negative. If so, it means it failed to open so we skip this event device
                 continue;
             }
 
-            // Get the name of the input device
             char name[256];
-            if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) < 0) {
-                close(fd);
+            if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) == -1) { // trying to fetch the name of the input device at the fd file descriptor
+                close(fd); // if it failed, we close the file descriptor and continue trying the next event device
                 continue;
             }
 
             // Check if it matches the joystick name
-            if (strncmp(name, JOYSTICK_NAME, strlen(JOYSTICK_NAME)) == 0) {
-                strncpy(joystick_path, device_path, path_len);
-                joystick_path[path_len - 1] = '\0';  // Ensure null termination
-                close(fd);
-                closedir(dp);
-                return 0;  // Success
+            if (strncmp(name, JOYSTICK_NAME, strlen(JOYSTICK_NAME)) == 0) { // checking if the name we fetched matches the joystick name
+                strncpy(joystick_path, device_path, path_len); // if there is a match, we copy the device path to the joystick path
+                joystick_path[path_len - 1] = '\0';  // adding null termination
+                close(fd); // closing the file descriptor
+                closedir(dp); // closing the input directory
+                return 0;
             }
 
-            // Close the file descriptor and continue
-            close(fd);
+            close(fd); // if the names didnt match, we close the file descriptor and try another event device
         }
     }
 
+    // if we didnt find any matching event device, we close the input directory and return -1 since the joystick wasnt found
     closedir(dp);
-    return -1;  // Joystick not found
+    return -1;
 }
 
+// function for initializing the joystick
 int initializeJoystick() {
-    char joystick_path[256];
+    char joystick_path[256]; // char array for storing the path of the joystick device
 
-    if (find_joystick_device(joystick_path, sizeof(joystick_path)) == -1) {
+    if (find_joystick_device(joystick_path, sizeof(joystick_path)) == -1) { // trying to find the joystick using the function above
         fprintf(stderr, "Joystick not found!\n");
-        return -1;
+        return -1; // returning -1 if it wasnt found
     }
 
-    joystick_fd = open(joystick_path, O_RDONLY | O_NONBLOCK);
-    if (joystick_fd == -1) {
+    joystick_fd = open(joystick_path, O_RDONLY | O_NONBLOCK); // trying to open the joystick device in readonly and with nonblock so that it doesnt wait and block for input
+    if (joystick_fd == -1) { // if the file descriptor is -1, it failed so we return with a failure
         perror("Error opening joystick device");
         return -1;
     }
 
-    return 0;  // Success
+    return 0; // returning 0 if the initialization was successful
 }
 
-// Close the joystick file descriptor
+// function for closing the joystick file descriptor
 void closeJoystick() {
     if (joystick_fd != -1) {
         close(joystick_fd);
@@ -295,9 +292,9 @@ void closeJoystick() {
 // and KEY_ENTER, when the the joystick is pressed
 // !!! when nothing was pressed you MUST return 0 !!!
 int readSenseHatJoystick() {
-    if (joystick_fd == -1) {
+    if (joystick_fd == -1) { // first checking if the joystick initialization was successful or not by checking the file descriptor
         printf("No joystick");
-        return 0;  // No joystick
+        return 0;  // didnt find the joystick
     }
 
     struct pollfd pollJoystick = {
@@ -328,7 +325,7 @@ int readSenseHatJoystick() {
         }
     }
 
-    return 0;  // No relevant input
+    return 0;  // returning 0 if no relevant keys were pressed
 }
 
 // This function should render the gamefield on the LED matrix. It is called
@@ -338,21 +335,24 @@ void renderSenseHatMatrix(uint16_t *fb_mem, bool const playfieldChanged)
 {
     //(void)playfieldChanged;
 
-    if (!playfieldChanged) {
-        return;
+    if (!playfieldChanged) { // first checking if the game logic has changed the playfield
+        return; // if it hasnt changed, we can return immediately
     }
 
+    // double for loop for updating each led light in the matrix to match the updated state of the playfield
     for (unsigned int y = 0; y < game.grid.y; y++)
     {
         for (unsigned int x = 0; x < game.grid.x; x++)
         {
-            coord const checkTile = {x, y};
-            if (tileOccupied(checkTile)) {
+            coord const checkTile = {x, y}; // coordinates of the tile we want to update
+            if (tileOccupied(checkTile)) { // first checking if the tile has become occupied
+                // if it has, we need to update the color of that tile in the matrix to match the color values of the tile in the playfield
                 uint8_t red = game.playfield[y][x].red;
                 uint8_t green = game.playfield[y][x].green;
                 uint8_t blue = game.playfield[y][x].blue;
                 setTileColor(fb_mem, red, green, blue, x, y);
             } else {
+                // if it is not occupied, we ensure that the tile remains dark by setting the rgb values to 0
                 setTileColor(fb_mem, 0, 0, 0, x, y);
             }
 
