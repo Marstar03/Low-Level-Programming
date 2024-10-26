@@ -21,13 +21,14 @@
 #define ROW_CLEAR (1 << 1)
 #define TILE_ADDED (1 << 2)
 
-#define FRAMEBUFFER_DIR "/dev/"
-#define TARGET_FB_NAME "RPi-Sense FB"
+#define FRAMEBUFFER_DIR "/dev/" // directory path for searching frame buffers
+#define TARGET_FB_NAME "RPi-Sense FB" // name of the target sense hat frame buffer
 #define MAX_FB_PATH 256
 
-#define JOYSTICK_NAME "Raspberry Pi Sense HAT Joystick"
-#define INPUT_DIR "/dev/input/"
+#define INPUT_DIR "/dev/input/" // directory path for searching input devices
+#define JOYSTICK_NAME "Raspberry Pi Sense HAT Joystick" // name of the target sense hat joystick input device
 
+// definition of different colors to choose between when adding a new tetris tile
 #define COLOR_RED {255, 0, 0}
 #define COLOR_GREEN {0, 255, 0}
 #define COLOR_BLUE {0, 0, 255}
@@ -35,7 +36,7 @@
 #define COLOR_PURPLE {128, 0, 128}
 
 
-// Global joystick file descriptor
+// global joystick file descriptor
 int joystick_fd = -1;
 
 // If you extend this structure, either avoid pointers or adjust
@@ -84,7 +85,9 @@ gameConfig game = {
     .initNextGameTick = 50,
 };
 
+// forward declarations for functions that are being called before they are defined
 static inline bool tileOccupied(coord const target);
+void closeJoystick();
 
 
 // Helper function to convert RGB888 to RGB565
@@ -213,8 +216,10 @@ void cleanupSenseHat(uint16_t *fb_mem, size_t fb_size) {
 
 // This function is called when the application exits
 // Here you can free up everything that you might have opened/allocated
-void freeSenseHat()
+void freeSenseHat(uint16_t *fb_mem, size_t fb_size)
 {
+    cleanupSenseHat(fb_mem, fb_size); // unmapping the sense hat frame buffer
+    closeJoystick(); // closing the joystick file descriptor
 }
 
 // function for finding the joystick device
@@ -292,6 +297,9 @@ void closeJoystick() {
 // and KEY_ENTER, when the the joystick is pressed
 // !!! when nothing was pressed you MUST return 0 !!!
 int readSenseHatJoystick() {
+    static int lastDirection = 0;    // Keep track of the last direction pressed
+    static bool isPressed = false;   // Track if the direction is currently being held
+
     if (joystick_fd == -1) { // first checking if the joystick initialization was successful or not by checking the file descriptor
         printf("No joystick");
         return 0;  // didnt find the joystick
@@ -301,28 +309,41 @@ int readSenseHatJoystick() {
         .fd = joystick_fd,
         .events = POLLIN
     };
-
-    int lkey = 0;
-
+    
     // Poll for input without blocking
     if (poll(&pollJoystick, 1, 0)) {
         struct input_event ev;
         while (read(joystick_fd, &ev, sizeof(ev)) > 0) {
-            if (ev.type == EV_KEY && ev.value == 1) {  // EV_KEY with value 1 means key press
-                switch (ev.code) {
-                    case KEY_ENTER:
-                        return KEY_ENTER;
-                    case KEY_UP:
-                        return KEY_UP;
-                    case KEY_DOWN:
-                        return KEY_DOWN;
-                    case KEY_RIGHT:
-                        return KEY_RIGHT;
-                    case KEY_LEFT:
-                        return KEY_LEFT;
+            if (ev.type == EV_KEY) {  // EV_KEY with value 1 means key press
+                if (ev.value == 1) {
+                    isPressed = true;
+                    lastDirection = ev.code; // Update the last direction
+                    return lastDirection;
+                    // switch (ev.code) {
+                    //     case KEY_ENTER:
+                    //         return KEY_ENTER;
+                    //     case KEY_UP:
+                    //         return KEY_UP;
+                    //     case KEY_DOWN:
+                    //         return KEY_DOWN;
+                    //     case KEY_RIGHT:
+                    //         return KEY_RIGHT;
+                    //     case KEY_LEFT:
+                    //         return KEY_LEFT;
+                    // }
+
+                } else if (ev.value == 0) { // Key released
+                    isPressed = false; // Stop holding the direction
+                    lastDirection = 0; // Reset direction
                 }
+
             }
         }
+    }
+
+    // If a direction is being "held," continue returning it
+    if (isPressed) {
+        return lastDirection;
     }
 
     return 0;  // returning 0 if no relevant keys were pressed
@@ -339,6 +360,8 @@ void renderSenseHatMatrix(uint16_t *fb_mem, bool const playfieldChanged)
         return; // if it hasnt changed, we can return immediately
     }
 
+    setMatrixColor(fb_mem, 0, 0, 0);
+
     // double for loop for updating each led light in the matrix to match the updated state of the playfield
     for (unsigned int y = 0; y < game.grid.y; y++)
     {
@@ -351,10 +374,11 @@ void renderSenseHatMatrix(uint16_t *fb_mem, bool const playfieldChanged)
                 uint8_t green = game.playfield[y][x].green;
                 uint8_t blue = game.playfield[y][x].blue;
                 setTileColor(fb_mem, red, green, blue, x, y);
-            } else {
-                // if it is not occupied, we ensure that the tile remains dark by setting the rgb values to 0
-                setTileColor(fb_mem, 0, 0, 0, x, y);
-            }
+            } 
+            // else {
+            //     // if it is not occupied, we ensure that the tile remains dark by setting the rgb values to 0
+            //     setTileColor(fb_mem, 0, 0, 0, x, y);
+            // }
 
         }
     }
@@ -735,11 +759,14 @@ int main(int argc, char **argv)
     size_t fb_size;
     char fb_path[MAX_FB_PATH];
 
+    // Change: added inputs to initializeSenseHat function
     if (!initializeSenseHat(&fb_mem, &fb_size, fb_path))
     {
         fprintf(stderr, "ERROR: could not initilize sense hat\n");
         return 1;
     } 
+
+    // Change: added initializationo of joystick. Can maybe be moved into the initializesensehat function later
     if (initializeJoystick() != 0)
     {
         fprintf(stderr, "ERROR: could not initialize joystick\n");
@@ -749,8 +776,9 @@ int main(int argc, char **argv)
     // Clear console, render first time
     fprintf(stdout, "\033[H\033[J");
     renderConsole(true);
+
+    // Change: added fb_mem as parameter
     renderSenseHatMatrix(fb_mem, true);
-    setMatrixColor(fb_mem, 0, 0, 0);
 
     while (true)
     {
@@ -764,6 +792,8 @@ int main(int argc, char **argv)
             // reading the inputs from stdin. However, we expect you to read the inputs directly
             // from the input device and not from stdin (you should implement the readSenseHatJoystick
             // method).
+            
+            // Change: uncommented this line. Make it a comment later
             key = readKeyboard();
         }
         if (key == KEY_ENTER)
@@ -771,6 +801,8 @@ int main(int argc, char **argv)
 
         bool playfieldChanged = sTetris(key);
         renderConsole(playfieldChanged);
+
+        // Change: added fb_mem as parameter
         renderSenseHatMatrix(fb_mem, playfieldChanged);
 
         // Wait for next tick
@@ -783,9 +815,9 @@ int main(int argc, char **argv)
         game.tick = (game.tick + 1) % game.nextGameTick;
     }
 
-    freeSenseHat();
-    cleanupSenseHat(fb_mem, fb_size);
-    closeJoystick();
+    // Change: added fb_mem and fb_size as parameters
+    freeSenseHat(fb_mem, fb_size);
+
     free(game.playfield);
     free(game.rawPlayfield);
 
