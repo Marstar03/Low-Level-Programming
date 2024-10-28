@@ -44,6 +44,8 @@ int joystick_fd = -1;
 typedef struct
 {
     bool occupied;
+
+    // added colors for each tile in order to separate them on the sense hat
     uint8_t red;
     uint8_t green;
     uint8_t blue;
@@ -90,42 +92,49 @@ static inline bool tileOccupied(coord const target);
 void closeJoystick();
 
 
-// Helper function to convert RGB888 to RGB565
-uint16_t rgb888_to_rgb565(uint8_t red, uint8_t green, uint8_t blue) {
-    uint16_t r = (red >> 3) & 0x1F;
-    uint16_t g = (green >> 2) & 0x3F;
-    uint16_t b = (blue >> 3) & 0x1F;
-    return (r << 11) | (g << 5) | b;
+// helper function to convert color values from 8 bits each to one 16 bit int
+uint16_t rgb888_to_rgb565(uint8_t red, uint8_t green, uint8_t blue) 
+{
+    uint16_t r = (red >> 3) & 0x1F; // reducing red from 8 to 5 bits by right shifting 3 bits and then only keeping the remaining 5 bits
+    uint16_t g = (green >> 2) & 0x3F; // reducing green from 8 to 6 bits by right shifting 2 bits
+    uint16_t b = (blue >> 3) & 0x1F; // reducing blue from 8 to 5 bits by right shifting 3 bits
+    return (r << 11) | (g << 5) | b; // returning the concatenation of the resulting rgb values
 }
 
-bool find_sensehat_fb(char *fb_path, size_t path_len) {
+// function for finding the path to the correct sense hat led matrix frame buffer
+bool find_sensehat_fb(char *fb_path, size_t path_len) 
+{
     struct fb_fix_screeninfo finfo; // struct for holding the sense hat screen information fetched using the frame buffer device api
     char device_path[MAX_FB_PATH]; // will hold the path to the frame buffer we are checking
     int fb_fd; // file descriptor for the frame buffer
     
     // iterating over all possible frame buffers, which is at most 32. Want to find the one for the sense hat by checking the name
-    for (int i = 0; i < 32; i++) {
+    for (int i = 0; i < 32; i++) 
+    {
         snprintf(device_path, sizeof(device_path), FRAMEBUFFER_DIR "fb%d", i); // creating the file path to the frame buffer we want to check
         
         fb_fd = open(device_path, O_RDWR); // trying to open the frame buffer
-        if (fb_fd == -1) { // if the file descriptor is -1, it means we were not able to open, so we skip to the next frame buffer
+        if (fb_fd == -1) // if the file descriptor is -1, it means we were not able to open, so we skip to the next frame buffer
+        {
             continue;
         }
         
-        if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) { // trying to fetch the screen information using ioctl and copying that to the address of the finfo struct
+        if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) // trying to fetch the screen information using ioctl and copying that to the address of the finfo struct
+        {
             // if it returns -1, it failed so we close the file descriptor and try the next frame buffer
             perror("ioctl FBIOGET_FSCREENINFO failed");
             close(fb_fd);
             continue;
         }
         
-        if (strncmp(finfo.id, TARGET_FB_NAME, strlen(TARGET_FB_NAME)) == 0) { // comparing the id field (name) of the screen info struct with the wanted name
+        if (strncmp(finfo.id, TARGET_FB_NAME, strlen(TARGET_FB_NAME)) == 0) // comparing the id field (name) of the screen info struct with the wanted name
+        {
             strncpy(fb_path, device_path, path_len - 1); // copying the device path to the frame buffer path
             fb_path[path_len - 1] = '\0';  // adding null termination
             close(fb_fd); // closing the file descriptor
             return true;
         }
-        
+
         close(fb_fd); // if the id was not the correct one, we close the file descriptor and keep iterating over the frame buffers
     }
     
@@ -137,38 +146,31 @@ bool find_sensehat_fb(char *fb_path, size_t path_len) {
 // Here you can initialize what ever you need for your task
 // return false if something fails, else true
 // Initialize Sense HAT and set all LEDs to one color
-bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path) {
+bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path) 
+{
     struct fb_fix_screeninfo finfo;
     int fb_fd;
     
-    if (!find_sensehat_fb(fb_path, MAX_FB_PATH)) { // first checking if we find the path to the frame buffer of the sense hat
+    if (!find_sensehat_fb(fb_path, MAX_FB_PATH)) // first checking if we find the path to the frame buffer of the sense hat
+    {
         fprintf(stderr, "RPi-Sense FB not found!\n");
         return false; // returning false if we didnt find it
     }
     
     fb_fd = open(fb_path, O_RDWR); // trying to open the frame buffer device
-    if (fb_fd == -1) {
+    if (fb_fd == -1) 
+    {
         perror("Error opening framebuffer device");
         return false; // returning false if we couldnt open it
     }
     
-    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) { // again trying to fetch the screen information using ioctl and copying that to the address of the finfo struct
+    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) // again trying to fetch the screen information using ioctl and copying that to the address of the finfo struct
+    {
         // if it returns -1, it failed so we close the file descriptor and return false
         perror("ioctl FBIOGET_FSCREENINFO failed");
         close(fb_fd);
         return false;
     }
-    
-    // kan muligens fjerne denne delen siden vi kan anta antall piksler etc
-    // -----------
-    // Retrieve variable screen information (needed for memory mapping)
-    struct fb_var_screeninfo vinfo;
-    if (ioctl(fb_fd, FBIOGET_VSCREENINFO, &vinfo) == -1) {
-        perror("ioctl FBIOGET_VSCREENINFO failed");
-        close(fb_fd);
-        return false;
-    }
-    // --------------
     
     *fb_size = finfo.smem_len; // finding the size of the framebuffer
     
@@ -177,7 +179,8 @@ bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path) {
     // setting second argument to the size of the framebuffer in memory, and says how much memory to map
     // using the third argument to give read and write permission to the mapped memory, so that we can update the sense hat
     *fb_mem = (uint16_t *)mmap(NULL, finfo.smem_len, PROT_READ | PROT_WRITE, MAP_SHARED, fb_fd, 0);
-    if (*fb_mem == MAP_FAILED) { // checking if the mapping to the pointer failed by comparing with MAP_FAILED return value
+    if (*fb_mem == MAP_FAILED) // checking if the mapping to the pointer failed by comparing with MAP_FAILED return value
+    {
         // if it failed we need to close the file descriptor and return false
         perror("Error memory-mapping the framebuffer");
         close(fb_fd);
@@ -190,26 +193,31 @@ bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path) {
 }
 
 // function that takes in rgb values in 8 bit format and sets the whole led matrix to that color
-void setMatrixColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue) {
+void setMatrixColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue) 
+{
     uint16_t color = rgb888_to_rgb565(red, green, blue); // calling the function to convert the 8 bit rgb values to a single 16 bit color int on the 565 rgb format
     
     // setting each of the 64 led lights to the retrieved color value
-    for (int i = 0; i < 8 * 8; i++) {
+    for (int i = 0; i < 8 * 8; i++) 
+    {
         fb_mem[i] = color; // using the pointer we got from the mmap and indexing into each led position to set the color
     }
 }
 
 // function that takes in rgb values in 8 bit format and sets a led light at specific xy coordinates in the matrix to that color 
-void setTileColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue, unsigned int x, unsigned int y) {
+void setTileColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue, unsigned int x, unsigned int y) 
+{
     uint16_t color = rgb888_to_rgb565(red, green, blue); // calling the function to convert the 8 bit rgb values to a single 16 bit color int on the 565 rgb format
     
     int fb_mem_index = y * 8 + x; // finding the index into the frame buffer based on the coordinates
     fb_mem[fb_mem_index] = color; // setting the value at that index to the color we found
 }
 
-// Unmap the framebuffer when done
-void cleanupSenseHat(uint16_t *fb_mem, size_t fb_size) {
-    if (munmap(fb_mem, fb_size) == -1) {
+// function for unmapping the framebuffer when done
+void cleanupSenseHat(uint16_t *fb_mem, size_t fb_size) 
+{
+    if (munmap(fb_mem, fb_size) == -1) // trying to unmap the framebuffer. Throwing error if it failed
+    {
         perror("Error unmapping the framebuffer");
     }
 }
@@ -223,34 +231,41 @@ void freeSenseHat(uint16_t *fb_mem, size_t fb_size)
 }
 
 // function for finding the joystick device
-int find_joystick_device(char *joystick_path, size_t path_len) {
+int find_joystick_device(char *joystick_path, size_t path_len) 
+{
     struct dirent *entry;
     DIR *dp = opendir(INPUT_DIR);
 
-    if (dp == NULL) { // throwing error if not able to open the directory for the input devices, which happens opendir returns null
+    if (dp == NULL) // throwing error if not able to open the directory for the input devices, which happens opendir returns null
+    {
         perror("Error opening input directory");
         return -1;
     }
 
     // iterating over each of the entries in the input directory. Using while loop compared to for loop when finding the sense hat since we dont know how many entries there are
-    while ((entry = readdir(dp)) != NULL) {
-        if (strncmp(entry->d_name, "event", 5) == 0) { // checking if the entry is an event device
+    while ((entry = readdir(dp)) != NULL) 
+    {
+        if (strncmp(entry->d_name, "event", 5) == 0) // checking if the entry is an event device
+        {
             char device_path[256];
             snprintf(device_path, sizeof(device_path), INPUT_DIR "%s", entry->d_name); // creating the path to the specific event device
 
             int fd = open(device_path, O_RDONLY); // opening the input device
-            if (fd < 0) { // checking if the file descriptor is negative. If so, it means it failed to open so we skip this event device
+            if (fd < 0) // checking if the file descriptor is negative. If so, it means it failed to open so we skip this event device
+            {
                 continue;
             }
 
             char name[256];
-            if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) == -1) { // trying to fetch the name of the input device at the fd file descriptor
+            if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) == -1) // trying to fetch the name of the input device at the fd file descriptor
+            {
                 close(fd); // if it failed, we close the file descriptor and continue trying the next event device
                 continue;
             }
 
             // Check if it matches the joystick name
-            if (strncmp(name, JOYSTICK_NAME, strlen(JOYSTICK_NAME)) == 0) { // checking if the name we fetched matches the joystick name
+            if (strncmp(name, JOYSTICK_NAME, strlen(JOYSTICK_NAME)) == 0) // checking if the name we fetched matches the joystick name
+            {
                 strncpy(joystick_path, device_path, path_len); // if there is a match, we copy the device path to the joystick path
                 joystick_path[path_len - 1] = '\0';  // adding null termination
                 close(fd); // closing the file descriptor
@@ -268,27 +283,32 @@ int find_joystick_device(char *joystick_path, size_t path_len) {
 }
 
 // function for initializing the joystick
-int initializeJoystick() {
+int initializeJoystick() 
+{
     char joystick_path[256]; // char array for storing the path of the joystick device
 
-    if (find_joystick_device(joystick_path, sizeof(joystick_path)) == -1) { // trying to find the joystick using the function above
+    if (find_joystick_device(joystick_path, sizeof(joystick_path)) == -1) // trying to find the joystick using the function above
+    {
         fprintf(stderr, "Joystick not found!\n");
-        return -1; // returning -1 if it wasnt found
+        return false; // returning false if it wasnt found
     }
 
     joystick_fd = open(joystick_path, O_RDONLY | O_NONBLOCK); // trying to open the joystick device in readonly and with nonblock so that it doesnt wait and block for input
-    if (joystick_fd == -1) { // if the file descriptor is -1, it failed so we return with a failure
+    if (joystick_fd == -1) // if the file descriptor is -1, it failed so we return with a failure
+    {
         perror("Error opening joystick device");
-        return -1;
+        return false;
     }
 
-    return 0; // returning 0 if the initialization was successful
+    return true; // returning true if the initialization was successful
 }
 
 // function for closing the joystick file descriptor
-void closeJoystick() {
-    if (joystick_fd != -1) {
-        close(joystick_fd);
+void closeJoystick() 
+{
+    if (joystick_fd != -1) // checking if the joystick file descriptor is valid or not
+    {
+        close(joystick_fd); // closing the file descriptor if it is valid
     }
 }
 
@@ -296,57 +316,32 @@ void closeJoystick() {
 // KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, with the respective direction
 // and KEY_ENTER, when the the joystick is pressed
 // !!! when nothing was pressed you MUST return 0 !!!
-int readSenseHatJoystick() {
-    static int lastDirection = 0;    // Keep track of the last direction pressed
-    static bool isPressed = false;   // Track if the direction is currently being held
-
-    if (joystick_fd == -1) { // first checking if the joystick initialization was successful or not by checking the file descriptor
+int readSenseHatJoystick() 
+{
+    if (joystick_fd == -1) // first checking if the joystick initialization was successful or not by checking the file descriptor
+    {
         printf("No joystick");
         return 0;  // didnt find the joystick
     }
 
-    struct pollfd pollJoystick = {
-        .fd = joystick_fd,
-        .events = POLLIN
+    struct pollfd pollJoystick = { // creating a pollfd struct with the joystick file descriptor to use when polling for events
+        .fd = joystick_fd, // setting fd as the joystick fd
+        .events = POLLIN // using pollin to read data
     };
     
-    // Poll for input without blocking
-    if (poll(&pollJoystick, 1, 0)) {
-        struct input_event ev;
-        while (read(joystick_fd, &ev, sizeof(ev)) > 0) {
-            if (ev.type == EV_KEY) {  // EV_KEY with value 1 means key press
-                if (ev.value == 1) {
-                    isPressed = true;
-                    lastDirection = ev.code; // Update the last direction
-                    return lastDirection;
-                    // switch (ev.code) {
-                    //     case KEY_ENTER:
-                    //         return KEY_ENTER;
-                    //     case KEY_UP:
-                    //         return KEY_UP;
-                    //     case KEY_DOWN:
-                    //         return KEY_DOWN;
-                    //     case KEY_RIGHT:
-                    //         return KEY_RIGHT;
-                    //     case KEY_LEFT:
-                    //         return KEY_LEFT;
-                    // }
-
-                } else if (ev.value == 0) { // Key released
-                    isPressed = false; // Stop holding the direction
-                    lastDirection = 0; // Reset direction
-                }
-
+    if (poll(&pollJoystick, 1, 0)) // checking if there is any new input on the file descriptor. Setting the third timeout parameter to 0 to make it nonblocking. So it doesnt wait for any events if there are none
+    {
+        struct input_event ev; // declaring input event struct as the destination when reading from the file descriptor
+        if (read(joystick_fd, &ev, sizeof(ev)) > 0) // reading from the file descriptor and checking if it was successful
+        {
+            if (ev.type == EV_KEY && (ev.value == 1 || ev.value == 2)) // checking that the event was a key press and if it either was a short press or a long press
+            {
+                return ev.code; // if that was the case, we return the code which is the value for the specific key that was pressed / joystick direction
             }
         }
     }
 
-    // If a direction is being "held," continue returning it
-    if (isPressed) {
-        return lastDirection;
-    }
-
-    return 0;  // returning 0 if no relevant keys were pressed
+    return 0;  // returning 0 if there were no inputs from the joystick
 }
 
 // This function should render the gamefield on the LED matrix. It is called
@@ -354,13 +349,12 @@ int readSenseHatJoystick() {
 // has changed the playfield
 void renderSenseHatMatrix(uint16_t *fb_mem, bool const playfieldChanged)
 {
-    //(void)playfieldChanged;
-
-    if (!playfieldChanged) { // first checking if the game logic has changed the playfield
+    if (!playfieldChanged) // first checking if the game logic has changed the playfield
+    {
         return; // if it hasnt changed, we can return immediately
     }
 
-    setMatrixColor(fb_mem, 0, 0, 0);
+    setMatrixColor(fb_mem, 0, 0, 0); // first setting all the led lights in the matrix to dark
 
     // double for loop for updating each led light in the matrix to match the updated state of the playfield
     for (unsigned int y = 0; y < game.grid.y; y++)
@@ -368,18 +362,14 @@ void renderSenseHatMatrix(uint16_t *fb_mem, bool const playfieldChanged)
         for (unsigned int x = 0; x < game.grid.x; x++)
         {
             coord const checkTile = {x, y}; // coordinates of the tile we want to update
-            if (tileOccupied(checkTile)) { // first checking if the tile has become occupied
+            if (tileOccupied(checkTile)) // first checking if the tile has become occupied
+            {
                 // if it has, we need to update the color of that tile in the matrix to match the color values of the tile in the playfield
-                uint8_t red = game.playfield[y][x].red;
-                uint8_t green = game.playfield[y][x].green;
-                uint8_t blue = game.playfield[y][x].blue;
-                setTileColor(fb_mem, red, green, blue, x, y);
+                uint8_t red = game.playfield[y][x].red; // getting red value
+                uint8_t green = game.playfield[y][x].green; // getting green value
+                uint8_t blue = game.playfield[y][x].blue; // getting blue value
+                setTileColor(fb_mem, red, green, blue, x, y); // setting the color of the tile
             } 
-            // else {
-            //     // if it is not occupied, we ensure that the tile remains dark by setting the rgb values to 0
-            //     setTileColor(fb_mem, 0, 0, 0, x, y);
-            // }
-
         }
     }
 }
@@ -767,7 +757,7 @@ int main(int argc, char **argv)
     } 
 
     // Change: added initializationo of joystick. Can maybe be moved into the initializesensehat function later
-    if (initializeJoystick() != 0)
+    if (!initializeJoystick())
     {
         fprintf(stderr, "ERROR: could not initialize joystick\n");
         return 1;
@@ -776,9 +766,7 @@ int main(int argc, char **argv)
     // Clear console, render first time
     fprintf(stdout, "\033[H\033[J");
     renderConsole(true);
-
-    // Change: added fb_mem as parameter
-    renderSenseHatMatrix(fb_mem, true);
+    renderSenseHatMatrix(fb_mem, true); // Change: added fb_mem as parameter
 
     while (true)
     {
@@ -792,9 +780,7 @@ int main(int argc, char **argv)
             // reading the inputs from stdin. However, we expect you to read the inputs directly
             // from the input device and not from stdin (you should implement the readSenseHatJoystick
             // method).
-            
-            // Change: uncommented this line. Make it a comment later
-            key = readKeyboard();
+            key = readKeyboard(); // Change: uncommented this line. Make it a comment later
         }
         if (key == KEY_ENTER)
             break;
@@ -815,9 +801,7 @@ int main(int argc, char **argv)
         game.tick = (game.tick + 1) % game.nextGameTick;
     }
 
-    // Change: added fb_mem and fb_size as parameters
-    freeSenseHat(fb_mem, fb_size);
-
+    freeSenseHat(fb_mem, fb_size); // Change: added fb_mem and fb_size as parameters
     free(game.playfield);
     free(game.rawPlayfield);
 
