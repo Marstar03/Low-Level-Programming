@@ -89,7 +89,6 @@ gameConfig game = {
 
 // forward declarations for functions that are being called before they are defined
 static inline bool tileOccupied(coord const target);
-void closeJoystick();
 
 
 // helper function to convert color values from 8 bits each to one 16 bit int
@@ -141,19 +140,73 @@ bool find_sensehat_fb(char *fb_path, size_t path_len)
     return false; // returning false if we didnt find any matching frame buffers
 }
 
+// function for finding the joystick device
+bool find_joystick_device(char *joystick_path, size_t path_len) 
+{
+    struct dirent *entry;
+    DIR *dp = opendir(INPUT_DIR);
+
+    if (dp == NULL) // throwing error if not able to open the directory for the input devices, which happens opendir returns null
+    {
+        perror("Error opening input directory");
+        return false;
+    }
+
+    // iterating over each of the entries in the input directory. Using while loop compared to for loop when finding the sense hat since we dont know how many entries there are
+    while ((entry = readdir(dp)) != NULL) 
+    {
+        if (strncmp(entry->d_name, "event", 5) == 0) // checking if the entry is an event device
+        {
+            char device_path[256];
+            snprintf(device_path, sizeof(device_path), INPUT_DIR "%s", entry->d_name); // creating the path to the specific event device
+
+            int fd = open(device_path, O_RDONLY); // opening the input device
+            if (fd < 0) // checking if the file descriptor is negative. If so, it means it failed to open so we skip this event device
+            {
+                continue;
+            }
+
+            char name[256];
+            if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) == -1) // trying to fetch the name of the input device at the fd file descriptor
+            {
+                close(fd); // if it failed, we close the file descriptor and continue trying the next event device
+                continue;
+            }
+
+            if (strncmp(name, JOYSTICK_NAME, strlen(JOYSTICK_NAME)) == 0) // checking if the name we fetched matches the joystick name
+            {
+                strncpy(joystick_path, device_path, path_len); // if there is a match, we copy the device path to the joystick path
+                joystick_path[path_len - 1] = '\0';  // adding null termination
+                close(fd); // closing the file descriptor
+                closedir(dp); // closing the input directory
+                return true;
+            }
+
+            close(fd); // if the names didnt match, we close the file descriptor and try another event device
+        }
+    }
+
+    // if we didnt find any matching event device, we close the input directory and return -1 since the joystick wasnt found
+    closedir(dp);
+    return false;
+}
+
 
 // This function is called on the start of your application
 // Here you can initialize what ever you need for your task
 // return false if something fails, else true
-// Initialize Sense HAT and set all LEDs to one color
+
+// initializing the sense hat led matrix and joystick
 bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path) 
 {
+    // first initializing setting up the sense hat led matrix
+
     struct fb_fix_screeninfo finfo;
     int fb_fd;
     
     if (!find_sensehat_fb(fb_path, MAX_FB_PATH)) // first checking if we find the path to the frame buffer of the sense hat
     {
-        fprintf(stderr, "RPi-Sense FB not found!\n");
+        fprintf(stderr, "RPi-Sense FB not found\n");
         return false; // returning false if we didnt find it
     }
     
@@ -188,8 +241,25 @@ bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path)
     }
 
     close(fb_fd); // closing the framebuffer file descriptor
+
+    // then setting up the sense hat joystick
+
+    char joystick_path[256]; // char array for storing the path of the joystick device
+
+    if (!find_joystick_device(joystick_path, sizeof(joystick_path))) // trying to find the joystick using the function above
+    {
+        fprintf(stderr, "Joystick not found\n");
+        return false; // returning false if it wasnt found
+    }
+
+    joystick_fd = open(joystick_path, O_RDONLY | O_NONBLOCK); // trying to open the joystick device in readonly and with nonblock so that it doesnt wait and block for input
+    if (joystick_fd == -1) // if the file descriptor is -1, it failed so we return with a failure
+    {
+        perror("Error opening joystick device");
+        return false;
+    }
     
-    return true;
+    return true; // returning true if everything went ok
 }
 
 // function that takes in rgb values in 8 bit format and sets the whole led matrix to that color
@@ -213,99 +283,17 @@ void setTileColor(uint16_t *fb_mem, uint8_t red, uint8_t green, uint8_t blue, un
     fb_mem[fb_mem_index] = color; // setting the value at that index to the color we found
 }
 
-// function for unmapping the framebuffer when done
-void cleanupSenseHat(uint16_t *fb_mem, size_t fb_size) 
-{
-    if (munmap(fb_mem, fb_size) == -1) // trying to unmap the framebuffer. Throwing error if it failed
-    {
-        perror("Error unmapping the framebuffer");
-    }
-}
-
 // This function is called when the application exits
 // Here you can free up everything that you might have opened/allocated
 void freeSenseHat(uint16_t *fb_mem, size_t fb_size)
 {
-    cleanupSenseHat(fb_mem, fb_size); // unmapping the sense hat frame buffer
-    closeJoystick(); // closing the joystick file descriptor
-}
-
-// function for finding the joystick device
-int find_joystick_device(char *joystick_path, size_t path_len) 
-{
-    struct dirent *entry;
-    DIR *dp = opendir(INPUT_DIR);
-
-    if (dp == NULL) // throwing error if not able to open the directory for the input devices, which happens opendir returns null
+    // want to unmap the sense hat framebuffer when done
+    if (munmap(fb_mem, fb_size) == -1) // trying to unmap the framebuffer
     {
-        perror("Error opening input directory");
-        return -1;
+        perror("Error unmapping the framebuffer"); // throwing error if it failed
     }
 
-    // iterating over each of the entries in the input directory. Using while loop compared to for loop when finding the sense hat since we dont know how many entries there are
-    while ((entry = readdir(dp)) != NULL) 
-    {
-        if (strncmp(entry->d_name, "event", 5) == 0) // checking if the entry is an event device
-        {
-            char device_path[256];
-            snprintf(device_path, sizeof(device_path), INPUT_DIR "%s", entry->d_name); // creating the path to the specific event device
-
-            int fd = open(device_path, O_RDONLY); // opening the input device
-            if (fd < 0) // checking if the file descriptor is negative. If so, it means it failed to open so we skip this event device
-            {
-                continue;
-            }
-
-            char name[256];
-            if (ioctl(fd, EVIOCGNAME(sizeof(name)), name) == -1) // trying to fetch the name of the input device at the fd file descriptor
-            {
-                close(fd); // if it failed, we close the file descriptor and continue trying the next event device
-                continue;
-            }
-
-            // Check if it matches the joystick name
-            if (strncmp(name, JOYSTICK_NAME, strlen(JOYSTICK_NAME)) == 0) // checking if the name we fetched matches the joystick name
-            {
-                strncpy(joystick_path, device_path, path_len); // if there is a match, we copy the device path to the joystick path
-                joystick_path[path_len - 1] = '\0';  // adding null termination
-                close(fd); // closing the file descriptor
-                closedir(dp); // closing the input directory
-                return 0;
-            }
-
-            close(fd); // if the names didnt match, we close the file descriptor and try another event device
-        }
-    }
-
-    // if we didnt find any matching event device, we close the input directory and return -1 since the joystick wasnt found
-    closedir(dp);
-    return -1;
-}
-
-// function for initializing the joystick
-int initializeJoystick() 
-{
-    char joystick_path[256]; // char array for storing the path of the joystick device
-
-    if (find_joystick_device(joystick_path, sizeof(joystick_path)) == -1) // trying to find the joystick using the function above
-    {
-        fprintf(stderr, "Joystick not found!\n");
-        return false; // returning false if it wasnt found
-    }
-
-    joystick_fd = open(joystick_path, O_RDONLY | O_NONBLOCK); // trying to open the joystick device in readonly and with nonblock so that it doesnt wait and block for input
-    if (joystick_fd == -1) // if the file descriptor is -1, it failed so we return with a failure
-    {
-        perror("Error opening joystick device");
-        return false;
-    }
-
-    return true; // returning true if the initialization was successful
-}
-
-// function for closing the joystick file descriptor
-void closeJoystick() 
-{
+    // when done we also want to close the joystick file descriptor
     if (joystick_fd != -1) // checking if the joystick file descriptor is valid or not
     {
         close(joystick_fd); // closing the file descriptor if it is valid
@@ -382,7 +370,8 @@ static inline void newTile(coord const target)
 {
     game.playfield[target.y][target.x].occupied = true;
 
-    uint8_t colors[][3] = {
+    // added functionality for choosing a random color for the new tile
+    uint8_t colors[][3] = { // array containing the possible colors, where each color is defined on the top as an array with 3 elements on the form {red, green, blue}
         COLOR_RED,
         COLOR_GREEN,
         COLOR_BLUE,
@@ -391,11 +380,11 @@ static inline void newTile(coord const target)
     };
 
     // Select a random color index
-    int colorIndex = rand() % 5;
+    int colorIndex = rand() % 5; // selecting a random number from 0 to 4 as index into the color array
 
-    game.playfield[target.y][target.x].red = colors[colorIndex][0];
-    game.playfield[target.y][target.x].green = colors[colorIndex][1];
-    game.playfield[target.y][target.x].blue = colors[colorIndex][2];
+    game.playfield[target.y][target.x].red = colors[colorIndex][0]; // setting the red value
+    game.playfield[target.y][target.x].green = colors[colorIndex][1]; // setting the green value
+    game.playfield[target.y][target.x].blue = colors[colorIndex][2]; // setting the blue value
 }
 
 static inline void copyTile(coord const to, coord const from)
@@ -756,13 +745,6 @@ int main(int argc, char **argv)
         return 1;
     } 
 
-    // Change: added initializationo of joystick. Can maybe be moved into the initializesensehat function later
-    if (!initializeJoystick())
-    {
-        fprintf(stderr, "ERROR: could not initialize joystick\n");
-        return 1;
-    }
-
     // Clear console, render first time
     fprintf(stdout, "\033[H\033[J");
     renderConsole(true);
@@ -787,9 +769,7 @@ int main(int argc, char **argv)
 
         bool playfieldChanged = sTetris(key);
         renderConsole(playfieldChanged);
-
-        // Change: added fb_mem as parameter
-        renderSenseHatMatrix(fb_mem, playfieldChanged);
+        renderSenseHatMatrix(fb_mem, playfieldChanged); // Change: added fb_mem as parameter
 
         // Wait for next tick
         gettimeofday(&eTv, NULL);
