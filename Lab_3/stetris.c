@@ -186,7 +186,7 @@ bool find_joystick_device(char *joystick_path, size_t path_len)
         }
     }
 
-    // if we didnt find any matching event device, we close the input directory and return -1 since the joystick wasnt found
+    // if we didnt find any matching event device, we close the input directory and return false since the joystick wasnt found
     closedir(dp);
     return false;
 }
@@ -217,7 +217,7 @@ bool initializeSenseHat(uint16_t **fb_mem, size_t *fb_size, char *fb_path)
         return false; // returning false if we couldnt open it
     }
     
-    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) // again trying to fetch the screen information using ioctl and copying that to the address of the finfo struct
+    if (ioctl(fb_fd, FBIOGET_FSCREENINFO, &finfo) == -1) // trying to fetch the screen information using ioctl and copying that to the address of the finfo struct
     {
         // if it returns -1, it failed so we close the file descriptor and return false
         perror("ioctl FBIOGET_FSCREENINFO failed");
