@@ -317,7 +317,9 @@ int readSenseHatJoystick()
         .events = POLLIN // using pollin to read data
     };
     
-    if (poll(&pollJoystick, 1, 0)) // checking if there is any new input on the file descriptor. Setting the third timeout parameter to 0 to make it nonblocking. So it doesnt wait for any events if there are none
+    while (poll(&pollJoystick, 1, 0) > 0) // checking if there is any new input on the file descriptor. Setting the third timeout parameter to 0 to make it nonblocking, 
+                                        // so it doesnt wait for any events if there are none.
+                                        // Also using while loop in order to handle multiple events in one go
     {
         struct input_event ev; // declaring input event struct as the destination when reading from the file descriptor
         if (read(joystick_fd, &ev, sizeof(ev)) > 0) // reading from the file descriptor and checking if it was successful
