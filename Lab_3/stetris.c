@@ -764,7 +764,7 @@ int main(int argc, char **argv)
             // reading the inputs from stdin. However, we expect you to read the inputs directly
             // from the input device and not from stdin (you should implement the readSenseHatJoystick
             // method).
-            key = readKeyboard(); // Change: uncommented this line. Make it a comment later
+            // key = readKeyboard();
         }
         if (key == KEY_ENTER)
             break;
