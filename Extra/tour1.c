@@ -22,7 +22,7 @@ void dataTypes() {
     double c = 10.5;
     char d = 'A';
     printf("a: %d, b: %f, c: %lf, d: %c\n", a, b, c, d);
-    printf("sizeof(n1): %llu, sizeof(a): %llu, sizeof(n2): %llu\n", sizeof(n1), sizeof(a), sizeof(n2));
+    printf("sizeof(n1): %zu, sizeof(a): %zu, sizeof(n2): %zu\n", sizeof(n1), sizeof(a), sizeof(n2));
 
     uint8_t e = 0b00001111; // initialized with a binary constant
     uint16_t f = 0b0000111100001111; // these are useful when you need to guarantee the size of a number
@@ -69,7 +69,7 @@ void structs() {
     struct Person p1;
     struct Person* personPtr = &p1; // Pointer to a struct
 
-    strcpy_s(p1.name, sizeof(p1.name), "Dennis Ritchie"); // strcpy is a function to copy strings
+    strcpy(p1.name, "Dennis Ritchie"); // strcpy is a function to copy strings
     p1.age = 30; // Accessing struct member via dot-notation
     p1.salary = 50000.0; 
     personPtr->age = 31; // Accessing struct members using a pointer
@@ -160,7 +160,8 @@ void shiftOperators() {
 void fileHandling() {
     // File handling
     FILE *fp;
-    if (fopen_s(&fp, "file.txt", "w") != 0) {
+    fp = fopen("file.txt", "w");
+    if (fp == NULL) {
         printf("Failed to open file\n");
         return;
     }
